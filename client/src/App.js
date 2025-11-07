@@ -111,7 +111,7 @@ Phase 2: Add signaling for WebRTC peer connections
 import React, { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 
-const SIGNALING_SERVER = "http://10.0.194.186:5000";
+const SIGNALING_SERVER = "https://meet-app-d2db.onrender.com";
 const socket = io(SIGNALING_SERVER);
 
 const ICE_CONFIG = {
