@@ -252,14 +252,54 @@ function App() {
     }
 
     const remoteStream = new MediaStream();
-    pc.ontrack = (event) => {
-      event.streams[0].getTracks().forEach((t) => remoteStream.addTrack(t));
-      peersRef.current[targetSocketId].stream = remoteStream;
-      setRemotePeers((prev) => {
-        if (prev.find((p) => p.socketId === targetSocketId)) return prev;
-        return [...prev, { socketId: targetSocketId, userName: targetUserName }];
-      });
-    };
+  //   pc.ontrack = (event) => {
+  //     const stream = event.streams[0];
+  //     if (!peersRef.current[targetSocketId].stream) {
+  //       peersRef.current[targetSocketId].stream = new MediaStream();
+  //     }
+  //     stream.getTracks().forEach(track => {
+  //     peersRef.current[targetSocketId].stream.addTrack(track);
+  //     });
+  //     setRemotePeers(prev => {
+  //     const exists = prev.find(p => p.socketId === targetSocketId);
+  //     if (!exists) return [...prev, { socketId: targetSocketId, userName: targetUserName }];
+  //     return prev;
+  // });
+
+  //     setRemotePeers((prev) => {
+  //       if (prev.find((p) => p.socketId === targetSocketId)) return prev;
+  //       return [...prev, { socketId: targetSocketId, userName: targetUserName }];
+  //     });
+  //   };
+  pc.ontrack = (event) => {
+  const stream = event.streams[0];
+
+  // Create a new stream entry if it doesn't exist
+  if (!peersRef.current[targetSocketId].stream) {
+    peersRef.current[targetSocketId].stream = new MediaStream();
+  }
+
+  // Add all tracks from the incoming stream
+  stream.getTracks().forEach((track) => {
+    const remoteStream = peersRef.current[targetSocketId].stream;
+    const alreadyHasTrack = remoteStream
+      .getTracks()
+      .some((t) => t.id === track.id);
+    if (!alreadyHasTrack) {
+      remoteStream.addTrack(track);
+    }
+  });
+
+  // Update the UI if needed
+  setRemotePeers((prev) => {
+    const exists = prev.find((p) => p.socketId === targetSocketId);
+    if (!exists) {
+      return [...prev, { socketId: targetSocketId, userName: targetUserName }];
+    }
+    return prev;
+  });
+};
+
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -345,8 +385,9 @@ function App() {
     }, 0);
   }
   // 📺 Screen sharing
-async function startScreenShare() {
+  async function startScreenShare() {
   try {
+    // Prompt the user to pick a screen/window to share
     const displayStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: false,
@@ -354,23 +395,23 @@ async function startScreenShare() {
 
     const screenTrack = displayStream.getVideoTracks()[0];
 
-    // Replace outgoing video track for all peers
+    // 🔹 Add the screen as an additional outgoing track for each peer
     for (const peerId in peersRef.current) {
-      const sender = peersRef.current[peerId].pc
-        .getSenders()
-        .find((s) => s.track && s.track.kind === "video");
-      if (sender) sender.replaceTrack(screenTrack);
+      const pc = peersRef.current[peerId].pc;
+      pc.addTrack(screenTrack, displayStream);
     }
 
-    // Update local video preview to show shared screen
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = displayStream;
-      await localVideoRef.current.play().catch(() => {});
+    // 🔹 Keep the camera on localVideoRef — show the shared screen in a new preview
+    const preview = document.getElementById("localScreenPreview");
+    if (preview) {
+      preview.srcObject = displayStream;
+      preview.play().catch(() => {});
     }
 
+    // Mark as sharing
     setIsScreenSharing(true);
 
-    // If user stops sharing via browser controls
+    // When user manually stops sharing via browser toolbar
     screenTrack.onended = () => {
       stopScreenShare();
     };
@@ -381,6 +422,48 @@ async function startScreenShare() {
     alert("Screen share failed: " + err.message);
   }
 }
+
+// async function startScreenShare() {
+//   try {
+//     const displayStream = await navigator.mediaDevices.getDisplayMedia({
+//       video: true,
+//       audio: false,
+//     });
+
+//     const screenTrack = displayStream.getVideoTracks()[0];
+
+//     // Replace outgoing video track for all peers
+//     for (const peerId in peersRef.current) {
+//       const sender = peersRef.current[peerId].pc
+//         .getSenders()
+//         .find((s) => s.track && s.track.kind === "video");
+//       // Instead of replacing, add the screen as a new track
+//       for (const peerId in peersRef.current) {
+//       const pc = peersRef.current[peerId].pc;
+//       pc.addTrack(screenTrack, displayStream);
+//     }
+
+//     }
+
+//     // Update local video preview to show shared screen
+//     if (localVideoRef.current) {
+//       localVideoRef.current.srcObject = displayStream;
+//       await localVideoRef.current.play().catch(() => {});
+//     }
+
+//     setIsScreenSharing(true);
+
+//     // If user stops sharing via browser controls
+//     screenTrack.onended = () => {
+//       stopScreenShare();
+//     };
+
+//     console.log("✅ Screen sharing started");
+//   } catch (err) {
+//     console.error("🚫 Screen sharing failed:", err);
+//     alert("Screen share failed: " + err.message);
+//   }
+// }
 
 //phase 3: stop screen sharing
 
@@ -478,6 +561,19 @@ function stopScreenShare() {
                     <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
                   )}
                 </div>
+                {isScreenSharing && (
+                  <div style={{ marginTop: 10 }}>
+                    <div>Screen Preview</div>
+                      <video
+                        id="localScreenPreview"
+                        autoPlay
+                        playsInline
+                        muted
+                        style={{ width: 320, height: 180, border: "2px solid #ccc" }}
+                    />
+                  </div>
+                )}
+
 
 
               </div>
