@@ -1022,94 +1022,8 @@ function stopScreenShare() {
   }
 
   return (
-    <div>
-  <h4>Local Feeds</h4>
-  {/* CAMERA FEED */}
-  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-    <div>
-      <div>📷 Camera</div>
-      <video
-        ref={localVideoRef}
-        autoPlay
-        playsInline
-        muted
-        style={{
-          width: 320,
-          height: 240,
-          backgroundColor: "#000",
-          borderRadius: "8px",
-          border: "2px solid #666",
-        }}
-      />
-    </div>
 
-    {/* SCREEN SHARE FEED */}
-    {isScreenSharing && (
-      <div>
-        <div>🖥️ Shared Screen Preview</div>
-        <video
-          ref={screenVideoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{
-            width: 480,
-            height: 270,
-            backgroundColor: "#000",
-            border: "2px solid #0af",
-            borderRadius: "8px",
-          }}
-        />
-      </div>
-    )}
 
-    {/* CONTROL BUTTONS */}
-    <div style={{ marginTop: 8 }}>
-      <button
-        style={{
-          padding: "6px 12px",
-          cursor: "pointer",
-          marginRight: 8,
-          backgroundColor: "#eee",
-        }}
-        onClick={() => {
-          const v = localVideoRef.current;
-          if (v && localStreamRef.current) {
-            v.srcObject = localStreamRef.current;
-            v.muted = true;
-            v.play().catch(() => {});
-          }
-        }}
-      >
-        ▶️ Start Camera
-      </button>
-
-      {!isScreenSharing ? (
-        <button
-          onClick={startScreenShare}
-          style={{
-            padding: "6px 12px",
-            cursor: "pointer",
-            backgroundColor: "#cce",
-          }}
-        >
-          🖥️ Share Screen
-        </button>
-      ) : (
-        <button
-          onClick={stopScreenShare}
-          style={{
-            padding: "6px 12px",
-            cursor: "pointer",
-            backgroundColor: "#fcc",
-          }}
-        >
-          ⛔ Stop Sharing
-        </button>
-      )}
-    </div>
-  </div>
-</div>
 
 //     <div style={{ padding: 20 }}>
 //       {!joined ? (
@@ -1221,6 +1135,96 @@ function stopScreenShare() {
 //         </div>
 //       )}
 //     </div>
+
+    <div>
+  <h4>Local Feeds</h4>
+  {/* CAMERA FEED */}
+  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+    <div>
+      <div>📷 Camera</div>
+      <video
+        ref={localVideoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          width: 320,
+          height: 240,
+          backgroundColor: "#000",
+          borderRadius: "8px",
+          border: "2px solid #666",
+        }}
+      />
+    </div>
+
+    {/* SCREEN SHARE FEED */}
+    {isScreenSharing && (
+      <div>
+        <div>🖥️ Shared Screen Preview</div>
+        <video
+          ref={screenVideoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{
+            width: 480,
+            height: 270,
+            backgroundColor: "#000",
+            border: "2px solid #0af",
+            borderRadius: "8px",
+          }}
+        />
+      </div>
+    )}
+
+    {/* CONTROL BUTTONS */}
+    <div style={{ marginTop: 8 }}>
+      <button
+        style={{
+          padding: "6px 12px",
+          cursor: "pointer",
+          marginRight: 8,
+          backgroundColor: "#eee",
+        }}
+        onClick={() => {
+          const v = localVideoRef.current;
+          if (v && localStreamRef.current) {
+            v.srcObject = localStreamRef.current;
+            v.muted = true;
+            v.play().catch(() => {});
+          }
+        }}
+      >
+        ▶️ Start Camera
+      </button>
+
+      {!isScreenSharing ? (
+        <button
+          onClick={startScreenShare}
+          style={{
+            padding: "6px 12px",
+            cursor: "pointer",
+            backgroundColor: "#cce",
+          }}
+        >
+          🖥️ Share Screen
+        </button>
+      ) : (
+        <button
+          onClick={stopScreenShare}
+          style={{
+            padding: "6px 12px",
+            cursor: "pointer",
+            backgroundColor: "#fcc",
+          }}
+        >
+          ⛔ Stop Sharing
+        </button>
+      )}
+    </div>
+  </div>
+</div>
+
   );
 }
 
