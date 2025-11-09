@@ -130,6 +130,8 @@ function App() {
   const localStreamRef = useRef(null);
   const peersRef = useRef({});
   const [remotePeers, setRemotePeers] = useState([]);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+
 
   // Signaling listeners (unchanged)
   useEffect(() => {
@@ -342,6 +344,72 @@ function App() {
       }
     }, 0);
   }
+  // 📺 Screen sharing
+async function startScreenShare() {
+  try {
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    });
+
+    const screenTrack = displayStream.getVideoTracks()[0];
+
+    // Replace outgoing video track for all peers
+    for (const peerId in peersRef.current) {
+      const sender = peersRef.current[peerId].pc
+        .getSenders()
+        .find((s) => s.track && s.track.kind === "video");
+      if (sender) sender.replaceTrack(screenTrack);
+    }
+
+    // Update local video preview to show shared screen
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = displayStream;
+      await localVideoRef.current.play().catch(() => {});
+    }
+
+    setIsScreenSharing(true);
+
+    // If user stops sharing via browser controls
+    screenTrack.onended = () => {
+      stopScreenShare();
+    };
+
+    console.log("✅ Screen sharing started");
+  } catch (err) {
+    console.error("🚫 Screen sharing failed:", err);
+    alert("Screen share failed: " + err.message);
+  }
+}
+
+//phase 3: stop screen sharing
+
+function stopScreenShare() {
+  try {
+    const camStream = localStreamRef.current;
+    if (!camStream) return;
+
+    const camTrack = camStream.getVideoTracks()[0];
+
+    // Replace outgoing video track back to camera
+    for (const peerId in peersRef.current) {
+      const sender = peersRef.current[peerId].pc
+        .getSenders()
+        .find((s) => s.track && s.track.kind === "video");
+      if (sender) sender.replaceTrack(camTrack);
+    }
+
+    // Update local preview
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = camStream;
+    }
+
+    setIsScreenSharing(false);
+    console.log("⛔ Screen sharing stopped, camera restored");
+  } catch (err) {
+    console.error("⚠️ Error stopping screen share:", err);
+  }
+}
 
   // Remote video component
   function RemoteVideo({ socketId, userName }) {
@@ -398,11 +466,19 @@ function App() {
                         });
                     } else {
                         console.warn("No video element or stream available yet.");
-            }
-          }}
+                    }
+                  }}
                 >
-  ▶️ Start Camera
+                ▶️ Start Camera
                 </button>
+                <div style={{ marginTop: 6 }}>
+                   {!isScreenSharing ? (
+                    <button onClick={startScreenShare}>🖥️ Share Screen</button>
+                    ) : (
+                    <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
+                  )}
+                </div>
+
 
               </div>
             </div>
