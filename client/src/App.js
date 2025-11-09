@@ -1022,116 +1022,205 @@ function stopScreenShare() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      {!joined ? (
-        <div>
-          <h2>Join a Room (WebRTC)</h2>
-          <input placeholder="Your name" value={userName} onChange={(e) => setUserName(e.target.value)} style={{ marginRight: 8 }} />
-          <input placeholder="Room ID" value={roomId} onChange={(e) => setRoomId(e.target.value)} style={{ marginRight: 8 }} />
-          <button onClick={joinRoom}>Join</button>
-          <div style={{ marginTop: 12, color: "gray" }}>{status}</div>
-        </div>
-      ) : (
-        <div>
-          <h3>Room: {roomId} — You: {userName}</h3>
-          <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-            <div>
-              <div>Local</div>
-              <video ref={localVideoRef} autoPlay playsInline muted style={{ width: 320, height: 240, backgroundColor: "#000" }} />
-              <div style={{ marginTop: 6 }}>
-                <button
-                  style={{ padding: "6px 12px", cursor: "pointer" }}
-                  onClick={() => {
-                    const v = localVideoRef.current;
-                    if (v && localStreamRef.current) {
-                      v.srcObject = localStreamRef.current;
-                      v.muted = true;
-                      v.playsInline = true;
-                      v.play()
-                        .then(() => console.log("▶️ Manual play success"))
-                        .catch((e) => {
-                          console.error("⚠️ Manual play failed:", e);
-                          alert("Play failed: " + e.message);
-                        });
-                    } else {
-                        console.warn("No video element or stream available yet.");
-                    }
-                  }}
-                >
-                ▶️ Start Camera
-                </button>
-                <div style={{ marginTop: 6 }}>
-                   {!isScreenSharing ? (
-                    <button onClick={startScreenShare}>🖥️ Share Screen</button>
-                    ) : (
-                    <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
-                  )}
-                </div>
-                <div>
-                  <div>Local</div>
-                    <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{ width: 320, height: 240, backgroundColor: "#000" }}
-                  />
-                <div style={{ marginTop: 6 }}>
-                <button
-                  style={{ padding: "6px 12px", cursor: "pointer" }}
-                  onClick={() => {
-                  const v = localVideoRef.current;
-                  if (v && localStreamRef.current) {
-                    v.srcObject = localStreamRef.current;
-                    v.muted = true;
-                    v.playsInline = true;
-                    v.play().catch(console.warn);
-                  }
-                  }}
-                >
-      ▶️ Start Camera
-    </button>
-    <div style={{ marginTop: 6 }}>
-      {!isScreenSharing ? (
-        <button onClick={startScreenShare}>🖥️ Share Screen</button>
-      ) : (
-        <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
-      )}
-    </div>
-  </div>
-
-  {/* NEW SCREEN SHARE PREVIEW */}
-  {isScreenSharing && (
-    <div style={{ marginTop: 12 }}>
-      <div>Shared Screen Preview</div>
+    <div>
+  <h4>Local Feeds</h4>
+  {/* CAMERA FEED */}
+  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+    <div>
+      <div>📷 Camera</div>
       <video
-        ref={screenVideoRef}
+        ref={localVideoRef}
         autoPlay
         playsInline
         muted
-        style={{ width: 320, height: 240, border: "2px solid #00f" }}
+        style={{
+          width: 320,
+          height: 240,
+          backgroundColor: "#000",
+          borderRadius: "8px",
+          border: "2px solid #666",
+        }}
       />
     </div>
-  )}
-</div>
 
+    {/* SCREEN SHARE FEED */}
+    {isScreenSharing && (
+      <div>
+        <div>🖥️ Shared Screen Preview</div>
+        <video
+          ref={screenVideoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{
+            width: 480,
+            height: 270,
+            backgroundColor: "#000",
+            border: "2px solid #0af",
+            borderRadius: "8px",
+          }}
+        />
+      </div>
+    )}
 
+    {/* CONTROL BUTTONS */}
+    <div style={{ marginTop: 8 }}>
+      <button
+        style={{
+          padding: "6px 12px",
+          cursor: "pointer",
+          marginRight: 8,
+          backgroundColor: "#eee",
+        }}
+        onClick={() => {
+          const v = localVideoRef.current;
+          if (v && localStreamRef.current) {
+            v.srcObject = localStreamRef.current;
+            v.muted = true;
+            v.play().catch(() => {});
+          }
+        }}
+      >
+        ▶️ Start Camera
+      </button>
 
-              </div>
-            </div>
-
-            <div>
-              <div>Remote peers</div>
-              <div>
-                {remotePeers.length === 0 && (<div style={{ color: "gray" }}>No one else in the room</div>)}
-                {remotePeers.map((p) => <RemoteVideo key={p.socketId} socketId={p.socketId} userName={p.userName} />)}
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 12, color: "gray" }}>{status}</div>
-        </div>
+      {!isScreenSharing ? (
+        <button
+          onClick={startScreenShare}
+          style={{
+            padding: "6px 12px",
+            cursor: "pointer",
+            backgroundColor: "#cce",
+          }}
+        >
+          🖥️ Share Screen
+        </button>
+      ) : (
+        <button
+          onClick={stopScreenShare}
+          style={{
+            padding: "6px 12px",
+            cursor: "pointer",
+            backgroundColor: "#fcc",
+          }}
+        >
+          ⛔ Stop Sharing
+        </button>
       )}
     </div>
+  </div>
+</div>
+
+//     <div style={{ padding: 20 }}>
+//       {!joined ? (
+//         <div>
+//           <h2>Join a Room (WebRTC)</h2>
+//           <input placeholder="Your name" value={userName} onChange={(e) => setUserName(e.target.value)} style={{ marginRight: 8 }} />
+//           <input placeholder="Room ID" value={roomId} onChange={(e) => setRoomId(e.target.value)} style={{ marginRight: 8 }} />
+//           <button onClick={joinRoom}>Join</button>
+//           <div style={{ marginTop: 12, color: "gray" }}>{status}</div>
+//         </div>
+//       ) : (
+//         <div>
+//           <h3>Room: {roomId} — You: {userName}</h3>
+//           <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+//             <div>
+//               <div>Local</div>
+//               <video ref={localVideoRef} autoPlay playsInline muted style={{ width: 320, height: 240, backgroundColor: "#000" }} />
+//               <div style={{ marginTop: 6 }}>
+//                 <button
+//                   style={{ padding: "6px 12px", cursor: "pointer" }}
+//                   onClick={() => {
+//                     const v = localVideoRef.current;
+//                     if (v && localStreamRef.current) {
+//                       v.srcObject = localStreamRef.current;
+//                       v.muted = true;
+//                       v.playsInline = true;
+//                       v.play()
+//                         .then(() => console.log("▶️ Manual play success"))
+//                         .catch((e) => {
+//                           console.error("⚠️ Manual play failed:", e);
+//                           alert("Play failed: " + e.message);
+//                         });
+//                     } else {
+//                         console.warn("No video element or stream available yet.");
+//                     }
+//                   }}
+//                 >
+//                 ▶️ Start Camera
+//                 </button>
+//                 <div style={{ marginTop: 6 }}>
+//                    {!isScreenSharing ? (
+//                     <button onClick={startScreenShare}>🖥️ Share Screen</button>
+//                     ) : (
+//                     <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
+//                   )}
+//                 </div>
+//                 <div>
+//                   <div>Local</div>
+//                     <video
+//                     ref={localVideoRef}
+//                     autoPlay
+//                     playsInline
+//                     muted
+//                     style={{ width: 320, height: 240, backgroundColor: "#000" }}
+//                   />
+//                 <div style={{ marginTop: 6 }}>
+//                 <button
+//                   style={{ padding: "6px 12px", cursor: "pointer" }}
+//                   onClick={() => {
+//                   const v = localVideoRef.current;
+//                   if (v && localStreamRef.current) {
+//                     v.srcObject = localStreamRef.current;
+//                     v.muted = true;
+//                     v.playsInline = true;
+//                     v.play().catch(console.warn);
+//                   }
+//                   }}
+//                 >
+//       ▶️ Start Camera
+//     </button>
+//     <div style={{ marginTop: 6 }}>
+//       {!isScreenSharing ? (
+//         <button onClick={startScreenShare}>🖥️ Share Screen</button>
+//       ) : (
+//         <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
+//       )}
+//     </div>
+//   </div>
+
+//   {/* NEW SCREEN SHARE PREVIEW */}
+//   {isScreenSharing && (
+//     <div style={{ marginTop: 12 }}>
+//       <div>Shared Screen Preview</div>
+//       <video
+//         ref={screenVideoRef}
+//         autoPlay
+//         playsInline
+//         muted
+//         style={{ width: 320, height: 240, border: "2px solid #00f" }}
+//       />
+//     </div>
+//   )}
+// </div>
+
+
+
+//               </div>
+//             </div>
+
+//             <div>
+//               <div>Remote peers</div>
+//               <div>
+//                 {remotePeers.length === 0 && (<div style={{ color: "gray" }}>No one else in the room</div>)}
+//                 {remotePeers.map((p) => <RemoteVideo key={p.socketId} socketId={p.socketId} userName={p.userName} />)}
+//               </div>
+//             </div>
+//           </div>
+//           <div style={{ marginTop: 12, color: "gray" }}>{status}</div>
+//         </div>
+//       )}
+//     </div>
   );
 }
 
