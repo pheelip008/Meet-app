@@ -649,6 +649,9 @@ function App() {
   const peersRef = useRef({});
   const [remotePeers, setRemotePeers] = useState([]);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const screenVideoRef = useRef(); // for local preview of shared screen
+  const screenStreamRef = useRef(null); // keep track of the screen stream
+
 
 
   // Signaling listeners (unchanged)
@@ -863,84 +866,7 @@ function App() {
     }, 0);
   }
   // 📺 Screen sharing
-  let screenWindowRef = null; // Add this at the top, outside the component if needed
 
-async function startScreenShare() {
-  try {
-    // Open a new popup window
-    screenWindowRef = window.open(
-      "",
-      "ScreenShareWindow",
-      "width=800,height=600,left=200,top=100"
-    );
-
-    if (!screenWindowRef) {
-      alert("Popup blocked! Please allow popups for this site.");
-      return;
-    }
-
-    screenWindowRef.document.title = "🖥️ Screen Sharing";
-    screenWindowRef.document.body.style.margin = "0";
-    screenWindowRef.document.body.style.backgroundColor = "#000";
-
-    // Create video element inside popup
-    const popupVideo = screenWindowRef.document.createElement("video");
-    popupVideo.style.width = "100%";
-    popupVideo.style.height = "100%";
-    popupVideo.autoplay = true;
-    popupVideo.playsInline = true;
-    screenWindowRef.document.body.appendChild(popupVideo);
-
-    // Capture the screen
-    const displayStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: false,
-    });
-
-    const screenTrack = displayStream.getVideoTracks()[0];
-    popupVideo.srcObject = displayStream;
-
-    // Send screen to all peers (extra stream, not replacing camera)
-    for (const peerId in peersRef.current) {
-      const pc = peersRef.current[peerId].pc;
-      displayStream.getTracks().forEach((track) => pc.addTrack(track, displayStream));
-    }
-
-    setIsScreenSharing(true);
-
-    // Stop when user stops sharing or closes window
-    screenTrack.onended = stopScreenShare;
-    screenWindowRef.onbeforeunload = stopScreenShare;
-
-    console.log("✅ Screen sharing started (new window)");
-  } catch (err) {
-    console.error("🚫 Screen sharing failed:", err);
-    alert("Screen share failed: " + err.message);
-  }
-}
-
-function stopScreenShare() {
-  console.log("⛔ Stopping screen share...");
-  setIsScreenSharing(false);
-
-  // Close the popup if it’s open
-  if (screenWindowRef && !screenWindowRef.closed) {
-    screenWindowRef.close();
-    screenWindowRef = null;
-  }
-
-  // Remove screen tracks from all peer connections
-  for (const peerId in peersRef.current) {
-    const senders = peersRef.current[peerId].pc.getSenders();
-    senders.forEach((sender) => {
-      if (sender.track && sender.track.kind === "video" && sender.track.label.includes("Screen")) {
-        peersRef.current[peerId].pc.removeTrack(sender);
-      }
-    });
-  }
-
-  console.log("✅ Screen sharing stopped");
-}
 
 // async function startScreenShare() {
 //   try {
@@ -978,8 +904,74 @@ function stopScreenShare() {
 //     alert("Screen share failed: " + err.message);
 //   }
 // }
+async function startScreenShare() {
+  try {
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    });
 
-// //phase 3: stop screen sharing
+    screenStreamRef.current = displayStream;
+    const screenTrack = displayStream.getVideoTracks()[0];
+
+    // Add the screen track to every peer connection
+    for (const peerId in peersRef.current) {
+      const pc = peersRef.current[peerId].pc;
+      pc.addTrack(screenTrack, displayStream);
+    }
+
+    // Create a local preview <video>
+    if (screenVideoRef.current) {
+      screenVideoRef.current.srcObject = displayStream;
+      await screenVideoRef.current.play().catch(() => {});
+    }
+
+    setIsScreenSharing(true);
+
+    // Auto-stop if user clicks "Stop sharing" in browser UI
+    screenTrack.onended = stopScreenShare;
+
+    console.log("✅ Screen sharing started with new feed");
+  } catch (err) {
+    console.error("🚫 Screen sharing failed:", err);
+    alert("Screen share failed: " + err.message);
+  }
+}
+
+
+//phase 3: stop screen sharing
+
+function stopScreenShare() {
+  try {
+    if (!screenStreamRef.current) return;
+
+    // Remove the screen track from all peer connections
+    const screenTrack = screenStreamRef.current.getVideoTracks()[0];
+    for (const peerId in peersRef.current) {
+      const pc = peersRef.current[peerId].pc;
+      pc.getSenders().forEach((sender) => {
+        if (sender.track === screenTrack) {
+          pc.removeTrack(sender);
+        }
+      });
+    }
+
+    // Stop the local screen tracks
+    screenStreamRef.current.getTracks().forEach((t) => t.stop());
+    screenStreamRef.current = null;
+
+    // Hide local screen video
+    if (screenVideoRef.current) {
+      screenVideoRef.current.srcObject = null;
+    }
+
+    setIsScreenSharing(false);
+    console.log("⛔ Screen sharing stopped and removed from peers");
+  } catch (err) {
+    console.error("⚠️ Error stopping screen share:", err);
+  }
+}
+
 
 // function stopScreenShare() {
 //   try {
@@ -1075,6 +1067,54 @@ function stopScreenShare() {
                     <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
                   )}
                 </div>
+                <div>
+                  <div>Local</div>
+                    <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ width: 320, height: 240, backgroundColor: "#000" }}
+                  />
+                <div style={{ marginTop: 6 }}>
+                <button
+                  style={{ padding: "6px 12px", cursor: "pointer" }}
+                  onClick={() => {
+                  const v = localVideoRef.current;
+                  if (v && localStreamRef.current) {
+                    v.srcObject = localStreamRef.current;
+                    v.muted = true;
+                    v.playsInline = true;
+                    v.play().catch(console.warn);
+                  }
+                  }}
+                >
+      ▶️ Start Camera
+    </button>
+    <div style={{ marginTop: 6 }}>
+      {!isScreenSharing ? (
+        <button onClick={startScreenShare}>🖥️ Share Screen</button>
+      ) : (
+        <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
+      )}
+    </div>
+  </div>
+
+  {/* NEW SCREEN SHARE PREVIEW */}
+  {isScreenSharing && (
+    <div style={{ marginTop: 12 }}>
+      <div>Shared Screen Preview</div>
+      <video
+        ref={screenVideoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{ width: 320, height: 240, border: "2px solid #00f" }}
+      />
+    </div>
+  )}
+</div>
+
 
 
               </div>
