@@ -274,31 +274,34 @@ function App() {
   pc.ontrack = (event) => {
   const stream = event.streams[0];
 
-  // Create a new stream entry if it doesn't exist
-  if (!peersRef.current[targetSocketId].stream) {
-    peersRef.current[targetSocketId].stream = new MediaStream();
+  // Ensure peer entry exists
+  if (!peersRef.current[targetSocketId]) {
+    peersRef.current[targetSocketId] = { pc, streams: [] };
   }
 
-  // Add all tracks from the incoming stream
-  stream.getTracks().forEach((track) => {
-    const remoteStream = peersRef.current[targetSocketId].stream;
-    const alreadyHasTrack = remoteStream
-      .getTracks()
-      .some((t) => t.id === track.id);
-    if (!alreadyHasTrack) {
-      remoteStream.addTrack(track);
-    }
-  });
+  // If this stream is not already tracked, store it
+  const peerEntry = peersRef.current[targetSocketId];
+  const alreadyHas = peerEntry.streams.some((s) => s.id === stream.id);
 
-  // Update the UI if needed
+  if (!alreadyHas) {
+    peerEntry.streams.push(stream);
+  }
+
+  // Add to UI (one <video> per stream)
   setRemotePeers((prev) => {
-    const exists = prev.find((p) => p.socketId === targetSocketId);
-    if (!exists) {
-      return [...prev, { socketId: targetSocketId, userName: targetUserName }];
+    const existing = prev.find((p) => p.socketId === targetSocketId);
+    if (!existing) {
+      return [...prev, { socketId: targetSocketId, userName: targetUserName, streams: peerEntry.streams }];
+    } else {
+      return prev.map((p) =>
+        p.socketId === targetSocketId
+          ? { ...p, streams: peerEntry.streams }
+          : p
+      );
     }
-    return prev;
   });
 };
+
 
 
     pc.onicecandidate = (event) => {
@@ -496,24 +499,46 @@ function stopScreenShare() {
 
   // Remote video component
   function RemoteVideo({ socketId, userName }) {
-    const videoRef = useRef();
-    useEffect(() => {
-      const id = setInterval(() => {
-        const entry = peersRef.current[socketId];
-        if (entry?.stream && videoRef.current && videoRef.current.srcObject !== entry.stream) {
-          videoRef.current.srcObject = entry.stream;
-          videoRef.current.play().catch(() => {});
-        }
-      }, 200);
-      return () => clearInterval(id);
-    }, [socketId]);
-    return (
-      <div style={{ display: "inline-block", margin: 8 }}>
-        <video ref={videoRef} autoPlay playsInline style={{ width: 240, height: 180, backgroundColor: "#000" }} />
-        <div style={{ textAlign: "center" }}>{userName || socketId}</div>
+  const [streams, setStreams] = useState([]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const entry = peersRef.current[socketId];
+      if (entry?.streams) {
+        setStreams(entry.streams);
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, [socketId]);
+
+  return (
+    <div style={{ display: "inline-block", margin: 8 }}>
+      <div style={{ textAlign: "center", marginBottom: 4 }}>
+        {userName || socketId}
       </div>
-    );
-  }
+      {streams.map((stream, idx) => (
+        <video
+          key={stream.id}
+          autoPlay
+          playsInline
+          ref={(el) => {
+            if (el && el.srcObject !== stream) {
+              el.srcObject = stream;
+            }
+          }}
+          style={{
+            width: 240,
+            height: 180,
+            marginBottom: 4,
+            backgroundColor: "#000",
+            border: idx > 0 ? "2px solid #ccc" : "none", // highlight shared screen
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 
   return (
     <div style={{ padding: 20 }}>
