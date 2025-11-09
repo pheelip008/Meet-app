@@ -1141,6 +1141,12 @@ function stopScreenShare() {
   </div>
 </div>
 
+
+
+
+              </div>
+            </div>
+
             <div>
               <div>Remote peers</div>
               <div>
@@ -1153,6 +1159,7 @@ function stopScreenShare() {
         </div>
       )}
     </div>
+
 
   );
 }
