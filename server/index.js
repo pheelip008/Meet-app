@@ -150,6 +150,14 @@ io.on("connection", (socket) => {
       console.log(`${userName} disconnected (${socket.id})`);
       socket.to(roomId).emit("user-left", { socketId: socket.id, userName });
     });
+    socket.on("renegotiate-offer", ({ targetSocketId, sdp }) => {
+    io.to(targetSocketId).emit("renegotiate-offer", { from: socket.id, sdp });
+    });
+
+    socket.on("renegotiate-answer", ({ targetSocketId, sdp }) => {
+    io.to(targetSocketId).emit("renegotiate-answer", { from: socket.id, sdp });
+    });
+
   });
 });
 
