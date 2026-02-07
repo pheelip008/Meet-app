@@ -135,8 +135,17 @@ io.on("connection", (socket) => {
     });
 
     socket.on("answer", (payload) => {
-      const { targetSocketId, sdp, isScreen } = payload;
-      io.to(targetSocketId).emit("answer", {
+      let { targetSocketId, sdp, isScreen } = payload;
+
+      // Fix routing: If target is a virtual screen peer, route to the real socket
+      let realTargetId = targetSocketId;
+      if (targetSocketId && targetSocketId.endsWith("-screen")) {
+        realTargetId = targetSocketId.replace("-screen", "");
+        // If we are answering a screen, we must ensure the sender knows it's about the screen
+        isScreen = true;
+      }
+
+      io.to(realTargetId).emit("answer", {
         from: isScreen ? `${socket.id}-screen` : socket.id,
         sdp,
         isScreen
@@ -144,8 +153,16 @@ io.on("connection", (socket) => {
     });
 
     socket.on("ice-candidate", (payload) => {
-      const { targetSocketId, candidate, isScreen } = payload;
-      io.to(targetSocketId).emit("ice-candidate", {
+      let { targetSocketId, candidate, isScreen } = payload;
+
+      // Fix routing
+      let realTargetId = targetSocketId;
+      if (targetSocketId && targetSocketId.endsWith("-screen")) {
+        realTargetId = targetSocketId.replace("-screen", "");
+        isScreen = true;
+      }
+
+      io.to(realTargetId).emit("ice-candidate", {
         from: isScreen ? `${socket.id}-screen` : socket.id,
         candidate,
         isScreen

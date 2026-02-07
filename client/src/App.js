@@ -58,8 +58,20 @@ function App() {
 
     socket.on("user-joined", async ({ socketId, userName }) => {
       log(`${userName} joined the room`);
-      // existing users do NOT initiate offers; new user will create offers
+      // existing users do NOT initiate offers; new user will create offers (for camera)
       await createPeerConnectionAndOffer(socketId, userName, false);
+
+      // BUT, if I am sharing screen, I *DO* need to initiate the screen share offer to this new user!
+      // Because the new user doesn't know about my "virtual screen peer" from the server's existing-users list.
+      if (typeof isScreenSharing === 'boolean' && isScreenSharing) {
+        // We use a timeout to let the main connection settle slightly, though not strictly required
+        console.log(`🆕 New user joined while sharing screen. Connecting screen to ${userName}...`);
+        await shareScreenToPeer(socketId);
+      } else if (screenStreamRef.current) {
+        // Fallback check against ref
+        console.log(`🆕 New user joined while sharing screen (ref check). Connecting screen to ${userName}...`);
+        await shareScreenToPeer(socketId);
+      }
     });
 
     socket.on("offer", async ({ from, sdp, userName }) => {
@@ -67,20 +79,53 @@ function App() {
       await handleOffer(from, sdp, userName);
     });
 
-    socket.on("answer", async ({ from, sdp }) => {
-      log(`Received answer from ${from}`);
-      const entry = peersRef.current[from];
+    socket.on("answer", async ({ from, sdp, isScreen }) => {
+      log(`Received answer from ${from} (isScreen: ${isScreen})`);
+
+      // Determine which PC to use
+      let entry = null;
+      if (isScreen || from.includes("-screen")) {
+        // It's an answer to our screen share offer!
+        // The 'from' might be the real socket ID (if server stripped it) or virtual ID.
+        // We stored it in screenPCRef using the target's real ID.
+        const realTargetId = from.replace("-screen", "");
+        const pc = screenPCRef.current ? screenPCRef.current[realTargetId] : null;
+        if (pc) {
+          entry = { pc }; // Mock entry for below logic
+          console.log("Found Screen PC for answer from", realTargetId);
+        }
+      } else {
+        entry = peersRef.current[from];
+      }
+
       if (entry) {
         if (entry.pc.signalingState === "have-local-offer" || entry.pc.signalingState === "have-remote-pranswer") {
-          await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          try {
+            await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          } catch (e) {
+            console.error("Error setting remote description:", e);
+          }
         } else {
-          console.warn("⚠️ Received Answer but signalingState is:", entry.pc.signalingState);
+          console.warn(`⚠️ Received Answer but signalingState is: ${entry.pc.signalingState}`);
         }
+      } else {
+        console.warn("Could not find PC for answer from", from);
       }
     });
 
-    socket.on("ice-candidate", async ({ from, candidate }) => {
-      const entry = peersRef.current[from];
+    socket.on("ice-candidate", async ({ from, candidate, isScreen }) => {
+      let entry = null;
+
+      if (isScreen || from.includes("-screen")) {
+        const realTargetId = from.replace("-screen", "");
+        const pc = screenPCRef.current ? screenPCRef.current[realTargetId] : null;
+        if (pc) {
+          entry = { pc };
+        }
+      } else {
+        entry = peersRef.current[from];
+      }
+
       if (entry && candidate) {
         try {
           await entry.pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -536,6 +581,15 @@ function App() {
       } catch (e) { }
       delete peersRef.current[socketId];
     }
+
+    // Also remove screen PC if exists
+    if (screenPCRef.current && screenPCRef.current[socketId]) {
+      try {
+        screenPCRef.current[socketId].close();
+      } catch (e) { }
+      delete screenPCRef.current[socketId];
+    }
+
     setRemotePeers((prev) => prev.filter((p) => p.socketId !== socketId));
   }
 
@@ -567,8 +621,44 @@ function App() {
     }, 0);
   }
 
-  // Screen Share PC Reference
-  const screenPCRef = useRef(null);
+  // Helper: Share screen to a specific peer
+  async function shareScreenToPeer(targetId) {
+    if (!screenStreamRef.current) return;
+    if (targetId.includes("-screen")) return; // Don't share to a screen peer
+
+    log(`Initiating Screen Share to ${targetId}...`);
+    const pc = new RTCPeerConnection(ICE_CONFIG);
+
+    // Add track
+    const stream = screenStreamRef.current;
+    const track = stream.getVideoTracks()[0];
+    pc.addTrack(track, stream);
+
+    // ICE Candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("ice-candidate", {
+          targetSocketId: targetId,
+          candidate: event.candidate,
+          isScreen: true
+        });
+      }
+    };
+
+    // Create Offer
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    socket.emit("offer", {
+      targetSocketId: targetId,
+      sdp: pc.localDescription,
+      isScreen: true
+    });
+
+    // Store this PC
+    if (!screenPCRef.current) screenPCRef.current = {};
+    screenPCRef.current[targetId] = pc;
+  }
 
   async function startScreenShare() {
     try {
@@ -580,72 +670,22 @@ function App() {
       const screenTrack = displayStream.getVideoTracks()[0];
       screenStreamRef.current = displayStream;
 
-      // Create a NEW Peer Connection for the screen share
-      // We broadcast this to "all" but in this simple signaling model we just need to 
-      // create separate offers for each existing peer.
-      // actually, to keep it simple with our current "mesh" logic:
-      // We will iterate through all existing peers and initiate a NEW connection to them
-      // BUT, acting as if we are a new user.
-
-      // WAIT. The robust way is to treating the screen share as a single "user" 
-      // but in a mesh network, we need a PC per remote peer.
-      // So, we need `screenPeersRef` to hold PCs for the screen share output.
-
-      // Let's refine the plan:
-      // We will behave like we just joined the room as "MyName (Screen)".
-      // So need to emit "join-room"? No, that conflicts with socket ID.
-      // better: We manually initiate offers to all `remotePeers` with `isScreen: true`.
-
-      // Store PCs for screen sharing: keys are remoteSocketIds
+      // Store PCs for screen sharing
       screenPCRef.current = {};
 
       // 1. Show local preview
       if (screenVideoRef.current) {
         screenVideoRef.current.srcObject = displayStream;
         await screenVideoRef.current.play().catch(() => { });
-        // show debug
         screenVideoRef.current.style.border = "2px solid #0f0";
       }
       setIsScreenSharing(true);
       if (cameraPreviewRef.current) cameraPreviewRef.current.style.display = "block";
 
-      // 2. Iterate through all known participants and connect to them with a NEW PC
-      // We can use the existing `peersRef` to know who is in the room.
+      // 2. Iterate through all known participants
       const targets = Object.keys(peersRef.current);
-
       for (const targetId of targets) {
-        // Skip if target is already a screen peer (don't share screen to a screen)
-        if (targetId.includes("-screen")) continue;
-
-        log(`Initiating Screen Share to ${targetId}...`);
-        const pc = new RTCPeerConnection(ICE_CONFIG);
-
-        // Add track
-        pc.addTrack(screenTrack, displayStream);
-
-        // ICE Candidates
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            socket.emit("ice-candidate", {
-              targetSocketId: targetId,
-              candidate: event.candidate,
-              isScreen: true
-            });
-          }
-        };
-
-        // Create Offer
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        socket.emit("offer", {
-          targetSocketId: targetId,
-          sdp: pc.localDescription,
-          isScreen: true // FLAG TO TELL SERVER TO MODIFY ID
-        });
-
-        // Store this PC so we can close it later
-        screenPCRef.current[targetId] = pc;
+        await shareScreenToPeer(targetId);
       }
 
       screenTrack.onended = stopScreenShare;
@@ -653,7 +693,7 @@ function App() {
 
     } catch (err) {
       console.error("🚫 Screen sharing failed:", err);
-      alert("Screen share failed: " + err.message);
+      // alert("Screen share failed: " + err.message); // removed alert to avoid annoyance
     }
   }
 
