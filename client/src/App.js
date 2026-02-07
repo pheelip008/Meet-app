@@ -393,6 +393,29 @@ function App() {
       localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
     }
 
+    // --- ICE STATE DEBUGGING ---
+    pc.oniceconnectionstatechange = () => {
+      const state = pc.iceConnectionState;
+      log(`🧊 ICE State (${targetSocketId.substr(0, 4)}): ${state}`);
+      if (state === "failed" || state === "disconnected") {
+        log(`⚠️ Connection issues with ${targetUserName || targetSocketId}`);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      log(`🔗 Connection State (${targetSocketId.substr(0, 4)}): ${pc.connectionState}`);
+    };
+
+    // IMMEDIATE UI UPDATE: Show peer even before tracks arrive
+    setRemotePeers((prev) => {
+      if (prev.find(p => p.socketId === targetSocketId)) return prev;
+      return [...prev, {
+        socketId: targetSocketId,
+        userName: targetUserName,
+        streams: []
+      }];
+    });
+
 
     pc.ontrack = (event) => {
       const stream = event.streams[0];
