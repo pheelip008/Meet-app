@@ -382,7 +382,7 @@ function App() {
 
     pc.ontrack = (event) => {
       const stream = event.streams[0];
-      const track = event.track;
+
 
       // Ensure peer entry exists
       if (!peersRef.current[targetSocketId]) {
