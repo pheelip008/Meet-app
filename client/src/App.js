@@ -166,7 +166,26 @@ function App() {
     });
 
 
+    // NEW LISTENER: Handle Reconnection (Important for mobile)
+    socket.on("connect", () => {
+      log("🔌 Socket Connected: " + socket.id);
+      // If we were already in a room, re-join
+      if (joined && roomId && userName) {
+        log("🔄 Re-joining room after reconnect...");
+        socket.emit("join-room", roomId, userName);
+        // Note: This might duplicate peers if not handled carefully, 
+        // but existing-users usually sends the full list which we iterate.
+        // A cleaner way is to clear peers on disconnect.
+      }
+    });
+
+    socket.on("disconnect", () => {
+      log("🔌 Socket Disconnected");
+    });
+
     return () => {
+      socket.off("connect");
+      socket.off("disconnect");
       socket.off("existing-users");
       socket.off("user-joined");
       socket.off("offer");
@@ -179,7 +198,7 @@ function App() {
       socket.off("share-screen-stopped");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [joined, roomId, userName]); // Added deps so re-join works
 
   // Helper to update stream type safely
   const updateStreamType = (socketId, streamId, trackId, newType) => {
@@ -882,6 +901,10 @@ function App() {
         <div style={{ maxHeight: 150, overflowY: "auto", marginTop: 5, borderTop: "1px solid #333" }}>
           {debugLogs.map((l, i) => <div key={i}>{l}</div>)}
         </div>
+        <button onMouseDown={() => {
+          console.log("Current Peers Ref:", peersRef.current);
+          log("Peers in Ref: " + Object.keys(peersRef.current).join(", "));
+        }} style={{ fontSize: "10px", padding: 2, marginTop: 5 }}>DUMP PEERS</button>
       </div>
 
       {!joined ? (
