@@ -455,24 +455,21 @@ function App() {
         let type = "camera";
 
         // 1. Strict Signal Check
-        // Check if explicitly marked as screen share (check Stream ID OR Track ID)
         const isExplicityScreen = screenShareIds.current.has(stream.id) || (track && screenShareIds.current.has(track.id));
+
+        // 2. Strong Heuristic: If user already has a video stream, this NEW one must be a screen share
+        // (This bypasses race conditions where the signaling message arrives late)
+        const existingVideoStreams = currentEntry.streams.filter(s => s.mediaStream.getVideoTracks().length > 0);
+        const isVideo = stream.getVideoTracks().length > 0;
 
         if (isExplicityScreen) {
           type = "screen";
           console.log(`✅ Strict ID Match for Screen Share: ${stream.id}`);
-        } else {
-          // 2. Heuristic Check (Fallback)
-          // If this user ALREADY has a video stream (camera), and this is a NEW video track, it's likely a screen share.
-          const existingVideoStreams = currentEntry.streams.filter(s => s.mediaStream.getVideoTracks().length > 0);
-          const isVideo = stream.getVideoTracks().length > 0;
-
-          if (isVideo && existingVideoStreams.length >= 1) {
-            type = "screen";
-            console.warn(`⚠️ strict ID match failed, but HEURISTIC detected Screen Share (2nd video stream). Stream: ${stream.id}`);
-            // Auto-add to our known screen share set to prevent flipping back
-            screenShareIds.current.add(stream.id);
-          }
+        } else if (isVideo && existingVideoStreams.length > 0) {
+          type = "screen";
+          console.log(`✅ Heuristic Match for Screen Share (2nd video stream): ${stream.id}`);
+          // Auto-add to our known screen share set to prevent flipping back
+          screenShareIds.current.add(stream.id);
         }
 
         console.log(`NEW TRACK from ${targetSocketId}: Stream ${stream.id}, Track ${track?.id}, Inferred Type: ${type.toUpperCase()}`);
