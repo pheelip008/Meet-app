@@ -158,8 +158,8 @@ io.on("connection", (socket) => {
       io.to(targetSocketId).emit("renegotiate-answer", { from: socket.id, sdp });
     });
 
-    socket.on("share-screen-started", ({ targetSocketId, streamId }) => {
-      io.to(targetSocketId).emit("share-screen-started", { from: socket.id, streamId });
+    socket.on("share-screen-started", ({ targetSocketId, streamId, trackId }) => {
+      io.to(targetSocketId).emit("share-screen-started", { from: socket.id, streamId, trackId });
     });
 
     socket.on("share-screen-stopped", ({ targetSocketId }) => {

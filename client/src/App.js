@@ -12,6 +12,9 @@ const ICE_CONFIG = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
   ],
 };
 
@@ -819,6 +822,28 @@ function App() {
       <div className="stars"></div>
       <div className="stars2"></div>
       <div className="stars3"></div>
+      {/* DEBUG OVERLAY */}
+      <div style={{
+        position: "fixed",
+        top: 0,
+        right: 0,
+        background: "rgba(0,0,0,0.8)",
+        color: "#0f0",
+        padding: 5,
+        fontSize: "10px",
+        zIndex: 9999,
+        pointerEvents: "none"
+      }}>
+        <div>Status: {status}</div>
+        <div>Room: {roomId || "N/A"}</div>
+        <div>Socket: {socket.id}</div>
+        <div>Remote Peers: {remotePeers.length}</div>
+        <div>Screen Share: {isScreenSharing ? "ON" : "OFF"}</div>
+        <div style={{ maxHeight: 100, overflowY: "auto" }}>
+          Peers: {remotePeers.map(p => p.socketId.substr(0, 4)).join(", ")}
+        </div>
+      </div>
+
       {!joined ? (
         <div className="join-container">
           <div className="join-card">
