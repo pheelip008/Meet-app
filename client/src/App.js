@@ -30,6 +30,8 @@ function App() {
 
 
   const [cameraReady, setCameraReady] = useState(false);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
   // Signaling listeners
   useEffect(() => {
@@ -291,6 +293,10 @@ function App() {
         setCameraReady(true);
         // The useEffect above will handle adding tracks to peers!
 
+        // Make sure state reflects correct enabled status
+        setIsAudioEnabled(true);
+        setIsVideoEnabled(true);
+
         // Update local preview
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
@@ -310,6 +316,30 @@ function App() {
     }
   }
 
+  // Toggle Audio
+  const toggleAudio = () => {
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsAudioEnabled(audioTrack.enabled);
+        console.log("Audio enabled:", audioTrack.enabled);
+      }
+    }
+  };
+
+  // Toggle Video
+  const toggleVideo = () => {
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoEnabled(videoTrack.enabled);
+        console.log("Video enabled:", videoTrack.enabled);
+      }
+    }
+  };
+
 
   // create peer connection
   async function createPeerConnectionAndOffer(targetSocketId, targetUserName, initiateOffer = false) {
@@ -322,7 +352,7 @@ function App() {
       localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
     }
 
-    const remoteStream = new MediaStream();
+
     pc.ontrack = (event) => {
       const stream = event.streams[0];
       // Ensure peer entry exists
@@ -569,7 +599,7 @@ function App() {
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
       }
-      const screenStreamId = screenStreamRef.current?.id;
+
       screenStreamRef.current = null;
 
       // 2. Remove tracks from peers and renegotiate
@@ -728,6 +758,21 @@ function App() {
             <span style={{ position: "absolute", bottom: 5, left: 5, color: "white", fontSize: 10, background: "rgba(0,0,0,0.5)", padding: "2px 4px" }}>You</span>
           </div>
 
+          {/* Controls in Sidebar for Theater Mode */}
+          <div style={{ marginBottom: 20, display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "center" }}>
+            <button onClick={toggleAudio} style={{ backgroundColor: isAudioEnabled ? "#fff" : "#f44", cursor: "pointer" }}>
+              {isAudioEnabled ? "🎤 Mute" : "🔇 Unmute"}
+            </button>
+            <button onClick={toggleVideo} style={{ backgroundColor: isVideoEnabled ? "#fff" : "#f44", cursor: "pointer" }}>
+              {isVideoEnabled ? "📹 Stop Video" : "📷 Start Video"}
+            </button>
+            {!isScreenSharing ? (
+              <button onClick={startScreenShare}>🖥️ Share</button>
+            ) : (
+              <button onClick={stopScreenShare}>⛔ Stop Share</button>
+            )}
+          </div>
+
           {/* Remote Cameras */}
           {remotePeers.map(p => (
             <RemoteVideo key={p.socketId} {...p} inSidebar={true} />
@@ -745,20 +790,19 @@ function App() {
         <div>
           <div>Local</div>
           <video ref={localVideoRef} autoPlay playsInline muted style={{ width: 320, height: 240, backgroundColor: "#000" }} />
-          <div style={{ marginTop: 6 }}>
+          <div style={{ marginTop: 6, display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button onClick={toggleAudio} style={{ padding: "6px 12px", cursor: "pointer", backgroundColor: isAudioEnabled ? "#ddd" : "#f88" }}>
+              {isAudioEnabled ? "🎤 Mute" : "🔇 Unmute"}
+            </button>
+            <button onClick={toggleVideo} style={{ padding: "6px 12px", cursor: "pointer", backgroundColor: isVideoEnabled ? "#ddd" : "#f88" }}>
+              {isVideoEnabled ? "📹 Stop Video" : "📷 Start Video"}
+            </button>
+
             <button
               style={{ padding: "6px 12px", cursor: "pointer" }}
-              onClick={() => {
-                const v = localVideoRef.current;
-                if (v && localStreamRef.current) {
-                  v.srcObject = localStreamRef.current;
-                  v.muted = true;
-                  v.playsInline = true;
-                  v.play().catch(console.error);
-                }
-              }}
+              onClick={enableCamera}
             >
-              ▶️ Start Camera
+              ▶️ Init Camera
             </button>
             <div style={{ marginTop: 6 }}>
               {!isScreenSharing ? (
@@ -767,24 +811,26 @@ function App() {
                 <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
               )}
             </div>
-            {isScreenSharing && (
-              <div style={{ marginTop: 10 }}>
-                <div>Screen Preview</div>
-                <video
-                  ref={(el) => {
-                    screenVideoRef.current = el;
-                    if (el && screenStreamRef.current) {
-                      el.srcObject = screenStreamRef.current;
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{ width: 320, height: 180, border: "2px solid #ccc" }}
-                />
-              </div>
-            )}
           </div>
+
+          {/* Local Screen Preview if sharing */}
+          {isScreenSharing && (
+            <div style={{ marginTop: 10 }}>
+              <div>Screen Preview</div>
+              <video
+                ref={(el) => {
+                  screenVideoRef.current = el;
+                  if (el && screenStreamRef.current) {
+                    el.srcObject = screenStreamRef.current;
+                  }
+                }}
+                autoPlay
+                playsInline
+                muted
+                style={{ width: 320, height: 180, border: "2px solid #ccc" }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Remote Peers Grid */}
