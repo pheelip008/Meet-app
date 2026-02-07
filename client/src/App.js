@@ -217,25 +217,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joined, roomId, userName]); // Added deps so re-join works
 
-  // ... (previous code)
 
-  const requestSync = () => {
-    log("🔄 Requesting Connection Sync...");
-    socket.emit("sync-request");
-  };
-
-  // ... (keep existing render)
-
-  return (
-    // ...
-    {/* Add Sync Button to Controls */ }
-          {
-    joined && <button className="control-btn" onClick={requestSync} style={{ background: "#e67e22" }}>
-      🔄 Fix/Sync
-    </button>
-  }
-
-  // ...
 
 
   // Helper to update stream type safely
