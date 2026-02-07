@@ -476,13 +476,13 @@ function App() {
           return [...prev, {
             socketId: targetSocketId,
             userName: targetUserName,
-            // Use currentEntry.streams to ensure we get the latest
-            streams: currentEntry.streams
+            // IMMUTABLE COPY: Create a new array so React detects the change
+            streams: [...currentEntry.streams]
           }];
         } else {
           return prev.map((p) =>
             p.socketId === targetSocketId
-              ? { ...p, streams: currentEntry.streams }
+              ? { ...p, streams: [...currentEntry.streams] } // IMMUTABLE COPY
               : p
           );
         }
