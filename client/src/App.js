@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
+import "./App.css";
 
 const SIGNALING_SERVER =
   process.env.NODE_ENV === "production"
@@ -28,31 +29,36 @@ function App() {
   const screenStreamRef = useRef(null); // keep track of the screen stream
   const cameraPreviewRef = useRef(); // to restore camera preview
 
-  // Track which streams are screen shares explicitly by ID
-  const screenShareIds = useRef(new Set());
-
+  // Track which streams/tracks are screen shares explicitly by ID
+  const screenShareIds = useRef(new Set()); // Stores stream IDs AND track IDs
 
   const [cameraReady, setCameraReady] = useState(false);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
+  // Helper log
+  const log = (msg) => {
+    console.log(msg);
+    setStatus(prev => msg); // Simple overwrite for latest status
+  };
+
   // Signaling listeners
   useEffect(() => {
     socket.on("existing-users", async (users) => {
-      setStatus("Found existing users: " + users.map((u) => u.userName).join(", "));
+      log("Found existing users: " + users.map((u) => u.userName).join(", "));
       for (const user of users) {
         await createPeerConnectionAndOffer(user.socketId, user.userName, true);
       }
     });
 
     socket.on("user-joined", async ({ socketId, userName }) => {
-      setStatus(`${userName} joined the room`);
+      log(`${userName} joined the room`);
       // existing users do NOT initiate offers; new user will create offers
       await createPeerConnectionAndOffer(socketId, userName, false);
     });
 
     socket.on("offer", async ({ from, sdp, userName }) => {
-      setStatus(`Received offer from ${userName || from}`);
+      log(`Received offer from ${userName || from}`);
       await handleOffer(from, sdp, userName);
     });
 
@@ -86,8 +92,6 @@ function App() {
       // Verify state before processing
       if (entry.pc.signalingState !== "stable" && entry.pc.signalingState !== "have-remote-offer") {
         console.warn("⚠️ Renegotiation Offer received but state is:", entry.pc.signalingState);
-        // In some cases we might want to process anyway if it resets state, but usually this indicates a race.
-        // For now, let's try to process.
       }
 
       await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -113,35 +117,31 @@ function App() {
 
 
     socket.on("user-left", ({ socketId, userName }) => {
-      setStatus(`${userName || socketId} left`);
+      log(`${userName || socketId} left`);
       removePeer(socketId);
     });
 
     // NEW LISTENER: Explicit screen share started
-    socket.on("share-screen-started", ({ from, streamId }) => {
-      console.log(`🖥️ User ${from} started sharing screen with stream ID: ${streamId}`);
+    socket.on("share-screen-started", ({ from, streamId, trackId }) => {
+      log(`🖥️ Screen share started by ${from} (Stream: ${streamId})`);
       screenShareIds.current.add(streamId);
+      if (trackId) screenShareIds.current.add(trackId);
 
       // Update stream type in ref and state if stream already exists
-      updateStreamType(from, streamId, "screen");
+      updateStreamType(from, streamId, trackId, "screen");
     });
 
     // NEW LISTENER: Explicit screen share stopped
     socket.on("share-screen-stopped", ({ from }) => {
-      console.log(`🛑 User ${from} stopped sharing screen`);
-      // We might not know the exact ID if it was removed, but we can clean up
-      // Actually, better to just remove any "screen" type streams for that user or wait for track removal.
-      // But for "type" updating, we should revert any screen streams.
+      log(`🛑 User ${from} stopped sharing screen`);
 
-      // In practice, track removal handles the cleanup of the stream object itself.
-      // This signal is useful if we want to force UI updates or clean up our ID set.
-
-      // Let's find the screen stream for this user and remove it from our set
       const peer = peersRef.current[from];
       if (peer) {
         peer.streams.forEach(s => {
           if (s.type === "screen") {
             screenShareIds.current.delete(s.id);
+            // We can't easily know the track ID here without storing it in the stream obj, but it's fine
+            // Cleaup happens on track removal usually
           }
         });
       }
@@ -164,13 +164,18 @@ function App() {
   }, []);
 
   // Helper to update stream type safely
-  const updateStreamType = (socketId, streamId, newType) => {
+  const updateStreamType = (socketId, streamId, trackId, newType) => {
     // 1. Update Ref
     const entry = peersRef.current[socketId];
     if (entry) {
-      const streamObj = entry.streams.find(s => s.id === streamId);
+      // Try to find by stream ID first
+      let streamObj = entry.streams.find(s => s.id === streamId);
+
+      // If not linked by stream ID, maybe check tracks? (Harder since our stream obj structure relies on stream.id)
+
       if (streamObj) {
         streamObj.type = newType;
+        console.log(`Updated stream ${streamId} to type ${newType}`);
       }
     }
 
@@ -208,8 +213,6 @@ function App() {
           await cameraPreviewRef.current.play().catch(() => { });
           cameraPreviewRef.current.style.display = "none"; // hide initially
         }
-
-
 
         // attempt attach/play immediately and repeatedly for a few seconds
         const attachStream = async () => {
@@ -253,8 +256,6 @@ function App() {
 
 
   // --- SYNC CAMERA TO PEERS ---
-  // If camera becomes ready AFTER we joined (or we join before camera is ready),
-  // we need to add the tracks to existing peers.
   useEffect(() => {
     if (!joined || !cameraReady || !localStreamRef.current) return;
 
@@ -358,6 +359,8 @@ function App() {
 
     pc.ontrack = (event) => {
       const stream = event.streams[0];
+      const track = event.track; // Get track ID too
+
       // Ensure peer entry exists
       if (!peersRef.current[targetSocketId]) {
         peersRef.current[targetSocketId] = { pc, streams: [], userName: targetUserName };
@@ -369,11 +372,12 @@ function App() {
 
       if (!alreadyHas) {
         // STRICT TAGGING LOGIC:
-        // Check if explicitly marked as screen share
-        const isScreen = screenShareIds.current.has(stream.id);
+        // Check if explicitly marked as screen share (check Stream ID OR Track ID)
+        const isScreen = screenShareIds.current.has(stream.id) || (track && screenShareIds.current.has(track.id));
         const type = isScreen ? "screen" : "camera";
 
-        console.log(`NEW TRACK: Stream ${stream.id}, type inferred as: ${type}`);
+        console.log(`NEW TRACK: Stream ${stream.id}, Track ${track?.id}, type inferred as: ${type}`);
+        log(`New Video Track: ${type.toUpperCase()}`);
 
         const newStreamObj = {
           id: stream.id,
@@ -402,6 +406,7 @@ function App() {
             currentEntry.streams = currentEntry.streams.filter(s => s.id !== stream.id);
             // also remove from our ID set to be clean
             screenShareIds.current.delete(stream.id);
+            if (track) screenShareIds.current.delete(track.id);
           }
         };
       }
@@ -507,7 +512,7 @@ function App() {
     }
     socket.emit("join-room", roomId, userName);
     setJoined(true);
-    setStatus("Joined room: " + roomId);
+    log("Joined room: " + roomId);
 
     // user gesture: attempt to play the local video now (helps autoplay policies)
     setTimeout(() => {
@@ -526,20 +531,6 @@ function App() {
       }
     }, 0);
   }
-  // 📺 Screen sharing
-
-
-  // async function startScreenShare() {
-  //   try {
-  //     const displayStream = await navigator.mediaDevices.getDisplayMedia({
-  //       video: true,
-  //       audio: false,
-  //     });
-
-  //     const screenTrack = displayStream.getVideoTracks()[0];
-  //     // ...
-  //   } catch (err) { ... }
-  // }
 
   async function startScreenShare() {
     try {
@@ -559,9 +550,11 @@ function App() {
 
         // EXPLICIT SIGNAL: Tell peer this stream is a screen share
         // We do this BEFORE renegotiation to ensure they have the ID mapping
+        // Send BOTH streamId and trackId
         socket.emit("share-screen-started", {
           targetSocketId: peerId,
-          streamId: displayStream.id
+          streamId: displayStream.id,
+          trackId: screenTrack.id
         });
 
         // Negotiate the new track
@@ -590,11 +583,6 @@ function App() {
       alert("Screen share failed: " + err.message);
     }
   }
-
-
-
-
-  //phase 3: stop screen sharing
 
   async function stopScreenShare() {
     try {
@@ -648,15 +636,6 @@ function App() {
     }
   }
 
-
-
-
-  // function stopScreenShare() {
-  //   try {
-  //     // ...
-  //   } catch (err) { ... }
-  // }
-
   // Determine view mode
   // The layout switching logic depends on `screenShareStream` being found
   const screenShareStream = remotePeers.flatMap(p => p.streams).find(s => s.type === "screen");
@@ -665,20 +644,15 @@ function App() {
   // Remote video component
   function RemoteVideo({ socketId, userName, streams, inSidebar }) {
     return (
-      <div style={{
-        display: "flex",
-        flexDirection: inSidebar ? "column" : "row",
-        margin: 8,
-        alignItems: "center"
-      }}>
-        {!inSidebar && <div style={{ marginBottom: 4 }}>{userName || socketId}</div>}
+      <div className={inSidebar ? "remote-video-sidebar" : "video-wrapper"}>
+        {!inSidebar && <div className="user-label">{userName || socketId}</div>}
 
         {streams.map((stream, idx) => {
           // In theater mode sidebar, only show cameras
           if (inSidebar && stream.type === "screen") return null;
 
           return (
-            <div key={stream.id} style={{ position: "relative" }}>
+            <div key={stream.id} style={{ position: "relative", width: "100%", height: "100%" }}>
               <video
                 autoPlay
                 playsInline
@@ -688,14 +662,13 @@ function App() {
                   }
                 }}
                 style={{
-                  width: inSidebar ? 160 : 240,
-                  height: inSidebar ? 120 : 180,
-                  backgroundColor: "#000",
+                  width: inSidebar ? "100%" : "320px",
+                  height: inSidebar ? "auto" : "240px",
                   border: stream.type === "screen" ? "2px solid #00f" : "none",
                   borderRadius: 8
                 }}
               />
-              {inSidebar && <span style={{ position: "absolute", bottom: 5, left: 5, color: "white", fontSize: 10, background: "rgba(0,0,0,0.5)", padding: "2px 4px" }}>{userName}</span>}
+              {inSidebar && <span className="user-label" style={{ fontSize: "0.7rem", bottom: 5, left: 5 }}>{userName}</span>}
             </div>
           );
         })}
@@ -717,9 +690,9 @@ function App() {
     }
 
     return (
-      <div className="theater-container" style={{ display: "flex", height: "90vh", width: "100%" }}>
+      <div className="theater-container">
         {/* MAIN STAGE */}
-        <div className="main-stage" style={{ flex: 4, background: "#111", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+        <div className="main-stage">
           {isScreenSharing ? (
             <video
               ref={(el) => {
@@ -733,22 +706,22 @@ function App() {
             />
           ) : mainStageStream ? (
             <video
-              autoPlay playsInline
+              autoPlay playsInline muted // ADDED MUTED HERE FOR AUTOPLAY
               ref={el => { if (el && el.srcObject !== mainStageStream) el.srcObject = mainStageStream }}
               style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
             />
           ) : (
-            <div style={{ color: "white" }}>Waiting for screen share...</div>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "1.2rem" }}>Waiting for screen share...</div>
           )}
-          <div style={{ position: "absolute", top: 20, left: 20, color: "white", background: "rgba(0,0,0,0.6)", padding: 10, borderRadius: 8 }}>
+          <div className="stage-label">
             {isScreenSharing ? "You are presenting" : "Viewing Screen Share"}
           </div>
         </div>
 
         {/* SIDEBAR (Cameras) */}
-        <div className="reaction-sidebar" style={{ flex: 1, background: "#222", overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div className="reaction-sidebar">
           {/* Local Camera (You) */}
-          <div style={{ marginBottom: 10, position: "relative" }}>
+          <div className="video-wrapper" style={{ width: "100%", height: "auto", marginBottom: 15 }}>
             <video
               ref={(el) => {
                 cameraPreviewRef.current = el;
@@ -756,23 +729,23 @@ function App() {
                   el.srcObject = localStreamRef.current;
                 }
               }}
-              autoPlay playsInline muted style={{ width: 160, height: 120, borderRadius: 8, background: "#000" }}
+              autoPlay playsInline muted style={{ width: "100%", borderRadius: 8, background: "#000", display: "block" }}
             />
-            <span style={{ position: "absolute", bottom: 5, left: 5, color: "white", fontSize: 10, background: "rgba(0,0,0,0.5)", padding: "2px 4px" }}>You</span>
+            <span className="user-label">You</span>
           </div>
 
           {/* Controls in Sidebar for Theater Mode */}
-          <div style={{ marginBottom: 20, display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "center" }}>
-            <button onClick={toggleAudio} style={{ backgroundColor: isAudioEnabled ? "#fff" : "#f44", cursor: "pointer" }}>
+          <div style={{ marginBottom: 20, display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", width: "100%" }}>
+            <button className={isAudioEnabled ? "btn-active" : "btn-inactive"} onClick={toggleAudio} style={{ flex: 1, fontSize: "0.8rem", padding: "8px" }}>
               {isAudioEnabled ? "🎤 Mute" : "🔇 Unmute"}
             </button>
-            <button onClick={toggleVideo} style={{ backgroundColor: isVideoEnabled ? "#fff" : "#f44", cursor: "pointer" }}>
-              {isVideoEnabled ? "📹 Stop Video" : "📷 Start Video"}
+            <button className={isVideoEnabled ? "btn-active" : "btn-inactive"} onClick={toggleVideo} style={{ flex: 1, fontSize: "0.8rem", padding: "8px" }}>
+              {isVideoEnabled ? "📹 Stop" : "📷 Start"}
             </button>
             {!isScreenSharing ? (
-              <button onClick={startScreenShare}>🖥️ Share</button>
+              <button className="primary" onClick={startScreenShare} style={{ width: "100%", fontSize: "0.8rem", padding: "8px" }}>🖥️ Share</button>
             ) : (
-              <button onClick={stopScreenShare}>⛔ Stop Share</button>
+              <button className="danger" onClick={stopScreenShare} style={{ width: "100%", fontSize: "0.8rem", padding: "8px" }}>⛔ Stop Share</button>
             )}
           </div>
 
@@ -786,78 +759,75 @@ function App() {
   };
 
   const renderGridView = () => (
-    <div>
+    <div className="grid-container">
       <h3>Room: {roomId} — You: {userName}</h3>
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div className="controls-bar">
+        <button className={isAudioEnabled ? "btn-active" : "btn-inactive"} onClick={toggleAudio}>
+          {isAudioEnabled ? "🎤 Mute" : "🔇 Unmute"}
+        </button>
+        <button className={isVideoEnabled ? "btn-active" : "btn-inactive"} onClick={toggleVideo}>
+          {isVideoEnabled ? "📹 Stop" : "📷 Start"}
+        </button>
+
+        <button className="primary" onClick={enableCamera}>
+          ▶️ Init Camera
+        </button>
+
+        {!isScreenSharing ? (
+          <button className="primary" onClick={startScreenShare}>🖥️ Share Screen</button>
+        ) : (
+          <button className="danger" onClick={stopScreenShare}>⛔ Stop Sharing</button>
+        )}
+      </div>
+
+      <div className="video-grid">
         {/* Local Controls & Video */}
-        <div>
-          <div>Local</div>
+        <div className="video-wrapper">
           <video ref={localVideoRef} autoPlay playsInline muted style={{ width: 320, height: 240, backgroundColor: "#000" }} />
-          <div style={{ marginTop: 6, display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button onClick={toggleAudio} style={{ padding: "6px 12px", cursor: "pointer", backgroundColor: isAudioEnabled ? "#ddd" : "#f88" }}>
-              {isAudioEnabled ? "🎤 Mute" : "🔇 Unmute"}
-            </button>
-            <button onClick={toggleVideo} style={{ padding: "6px 12px", cursor: "pointer", backgroundColor: isVideoEnabled ? "#ddd" : "#f88" }}>
-              {isVideoEnabled ? "📹 Stop Video" : "📷 Start Video"}
-            </button>
-
-            <button
-              style={{ padding: "6px 12px", cursor: "pointer" }}
-              onClick={enableCamera}
-            >
-              ▶️ Init Camera
-            </button>
-            <div style={{ marginTop: 6 }}>
-              {!isScreenSharing ? (
-                <button onClick={startScreenShare}>🖥️ Share Screen</button>
-              ) : (
-                <button onClick={stopScreenShare}>⛔ Stop Sharing</button>
-              )}
-            </div>
-          </div>
-
-          {/* Local Screen Preview if sharing */}
-          {isScreenSharing && (
-            <div style={{ marginTop: 10 }}>
-              <div>Screen Preview</div>
-              <video
-                ref={(el) => {
-                  screenVideoRef.current = el;
-                  if (el && screenStreamRef.current) {
-                    el.srcObject = screenStreamRef.current;
-                  }
-                }}
-                autoPlay
-                playsInline
-                muted
-                style={{ width: 320, height: 180, border: "2px solid #ccc" }}
-              />
-            </div>
-          )}
+          <span className="user-label">You (Local)</span>
         </div>
+
+        {/* Local Screen Preview if sharing */}
+        {isScreenSharing && (
+          <div className="video-wrapper">
+            <video
+              ref={(el) => {
+                screenVideoRef.current = el;
+                if (el && screenStreamRef.current) {
+                  el.srcObject = screenStreamRef.current;
+                }
+              }}
+              autoPlay
+              playsInline
+              muted
+              style={{ width: 320, height: 180 }}
+            />
+            <span className="user-label">Your Screen</span>
+          </div>
+        )}
 
         {/* Remote Peers Grid */}
-        <div>
-          <div>Remote peers</div>
-          <div style={{ display: "flex", flexWrap: "wrap" }}>
-            {remotePeers.length === 0 && (<div style={{ color: "gray" }}>No one else in the room</div>)}
-            {remotePeers.map((p) => <RemoteVideo key={p.socketId} {...p} inSidebar={false} />)}
-          </div>
-        </div>
+        {remotePeers.length === 0 && (<div style={{ color: "rgba(255,255,255,0.5)", width: "100%", textAlign: "center", marginTop: 20 }}>No one else in the room</div>)}
+        {remotePeers.map((p) => <RemoteVideo key={p.socketId} {...p} inSidebar={false} />)}
       </div>
-      <div style={{ marginTop: 12, color: "gray" }}>{status}</div>
+      <div style={{ marginTop: 12, color: "rgba(255,255,255,0.6)", textAlign: "center" }}>{status}</div>
     </div>
   );
 
   return (
-    <div style={{ padding: joined ? 0 : 20, height: "100vh" }}>
+    <div className="App">
+      <div className="stars"></div>
+      <div className="stars2"></div>
+      <div className="stars3"></div>
       {!joined ? (
-        <div style={{ textAlign: "center", marginTop: 50 }}>
-          <h2>Join a Room (WebRTC)</h2>
-          <input placeholder="Your name" value={userName} onChange={(e) => setUserName(e.target.value)} style={{ marginRight: 8 }} />
-          <input placeholder="Room ID" value={roomId} onChange={(e) => setRoomId(e.target.value)} style={{ marginRight: 8 }} />
-          <button onClick={joinRoom}>Join</button>
-          <div style={{ marginTop: 12, color: "gray" }}>{status}</div>
+        <div className="join-container">
+          <div className="join-card">
+            <h2 style={{ margin: "0 0 20px 0" }}>Join Meeting</h2>
+            <input placeholder="Your Display Name" value={userName} onChange={(e) => setUserName(e.target.value)} />
+            <input placeholder="Room ID" value={roomId} onChange={(e) => setRoomId(e.target.value)} />
+            <button className="primary" onClick={joinRoom} style={{ width: "100%", justifyContent: "center" }}>Join Room</button>
+            <div style={{ marginTop: 15, color: "rgba(255,255,255,0.6)", fontSize: "0.9rem" }}>{status}</div>
+          </div>
         </div>
       ) : (
         isTheaterMode ? renderTheaterMode() : renderGridView()

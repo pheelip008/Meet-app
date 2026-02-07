@@ -1,86 +1,322 @@
-.App {
-  text-align: center;
+/* Global Styles & Reset */
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #000;
+  color: #fff;
+  overflow-x: hidden;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
+/* --- Starry Night Background Animation --- */
+@keyframes animStar {
+  from {
+    transform: translateY(0px);
+  }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
+  to {
+    transform: translateY(-2000px);
   }
 }
 
-.App-header {
-  background-color: #282c34;
+.stars {
+  width: 1px;
+  height: 1px;
+  background: transparent;
+  box-shadow: 1735px 90px #FFF, 839px 1209px #FFF, 532px 1422px #FFF, 597px 998px #FFF, 963px 1869px #FFF, 1429px 1450px #FFF, 608px 67px #FFF, 381px 1872px #FFF, 1716px 578px #FFF, 1373px 1762px #FFF, 1756px 1326px #FFF, 1283px 1699px #FFF, 1695px 1009px #FFF, 1424px 1709px #FFF, 123px 1544px #FFF, 1025px 233px #FFF, 1198px 899px #FFF, 1461px 864px #FFF, 1845px 544px #FFF, 1686px 871px #FFF, 107px 290px #FFF, 874px 145px #FFF, 663px 664px #FFF, 1632px 1656px #FFF, 1748px 198px #FFF, 574px 1554px #FFF, 175px 81px #FFF, 191px 260px #FFF, 135px 232px #FFF, 946px 167px #FFF, 1146px 635px #FFF, 1373px 304px #FFF, 1319px 763px #FFF, 1006px 421px #FFF, 1197px 1109px #FFF, 355px 1640px #FFF, 672px 1530px #FFF, 24px 791px #FFF, 249px 236px #FFF, 64px 381px #FFF, 167px 1279px #FFF, 1747px 1629px #FFF, 206px 1621px #FFF, 106px 1774px #FFF, 1121px 343px #FFF, 389px 408px #FFF, 735px 876px #FFF, 1731px 632px #FFF, 1500px 389px #FFF, 1269px 168px #FFF;
+  animation: animStar 50s linear infinite;
+}
+
+.stars::after {
+  content: " ";
+  position: absolute;
+  top: 2000px;
+  width: 1px;
+  height: 1px;
+  background: transparent;
+  box-shadow: 1735px 90px #FFF, 839px 1209px #FFF, 532px 1422px #FFF, 597px 998px #FFF, 963px 1869px #FFF, 1429px 1450px #FFF, 608px 67px #FFF, 381px 1872px #FFF, 1716px 578px #FFF, 1373px 1762px #FFF, 1756px 1326px #FFF, 1283px 1699px #FFF, 1695px 1009px #FFF, 1424px 1709px #FFF, 123px 1544px #FFF, 1025px 233px #FFF, 1198px 899px #FFF, 1461px 864px #FFF, 1845px 544px #FFF, 1686px 871px #FFF, 107px 290px #FFF, 874px 145px #FFF, 663px 664px #FFF, 1632px 1656px #FFF, 1748px 198px #FFF, 574px 1554px #FFF, 175px 81px #FFF, 191px 260px #FFF, 135px 232px #FFF, 946px 167px #FFF, 1146px 635px #FFF, 1373px 304px #FFF, 1319px 763px #FFF, 1006px 421px #FFF, 1197px 1109px #FFF, 355px 1640px #FFF, 672px 1530px #FFF, 24px 791px #FFF, 249px 236px #FFF, 64px 381px #FFF, 167px 1279px #FFF, 1747px 1629px #FFF, 206px 1621px #FFF, 106px 1774px #FFF, 1121px 343px #FFF, 389px 408px #FFF, 735px 876px #FFF, 1731px 632px #FFF, 1500px 389px #FFF, 1269px 168px #FFF;
+}
+
+.stars2 {
+  width: 2px;
+  height: 2px;
+  background: transparent;
+  box-shadow: 1711px 403px #FFF, 1346px 1465px #FFF, 876px 1362px #FFF, 483px 1500px #FFF, 521px 403px #FFF, 153px 439px #FFF, 1018px 231px #FFF, 1284px 1865px #FFF, 861px 1016px #FFF, 1708px 658px #FFF, 1332px 866px #FFF, 1253px 311px #FFF, 638px 1016px #FFF, 563px 1856px #FFF, 321px 1833px #FFF, 631px 1205px #FFF, 1256px 802px #FFF, 998px 66px #FFF, 1732px 739px #FFF, 414px 188px #FFF, 1006px 648px #FFF, 221px 1275px #FFF, 185px 5px #FFF, 1752px 1845px #FFF, 762px 119px #FFF, 725px 1099px #FFF, 1162px 1243px #FFF, 723px 1445px #FFF, 109px 406px #FFF, 1062px 1686px #FFF, 1699px 1184px #FFF, 1386px 1256px #FFF, 56px 608px #FFF, 1115px 1618px #FFF, 1388px 1888px #FFF, 60px 45px #FFF, 209px 1228px #FFF, 477px 610px #FFF, 165px 1459px #FFF, 281px 1099px #FFF, 663px 1238px #FFF, 532px 1189px #FFF, 1021px 852px #FFF, 362px 299px #FFF, 1642px 7px #FFF, 1636px 1746px #FFF, 1774px 1729px #FFF, 23px 1061px #FFF, 1092px 644px #FFF, 1457px 1146px #FFF;
+  animation: animStar 100s linear infinite;
+}
+
+.stars2::after {
+  content: " ";
+  position: absolute;
+  top: 2000px;
+  width: 2px;
+  height: 2px;
+  background: transparent;
+  box-shadow: 1711px 403px #FFF, 1346px 1465px #FFF, 876px 1362px #FFF, 483px 1500px #FFF, 521px 403px #FFF, 153px 439px #FFF, 1018px 231px #FFF, 1284px 1865px #FFF, 861px 1016px #FFF, 1708px 658px #FFF, 1332px 866px #FFF, 1253px 311px #FFF, 638px 1016px #FFF, 563px 1856px #FFF, 321px 1833px #FFF, 631px 1205px #FFF, 1256px 802px #FFF, 998px 66px #FFF, 1732px 739px #FFF, 414px 188px #FFF, 1006px 648px #FFF, 221px 1275px #FFF, 185px 5px #FFF, 1752px 1845px #FFF, 762px 119px #FFF, 725px 1099px #FFF, 1162px 1243px #FFF, 723px 1445px #FFF, 109px 406px #FFF, 1062px 1686px #FFF, 1699px 1184px #FFF, 1386px 1256px #FFF, 56px 608px #FFF, 1115px 1618px #FFF, 1388px 1888px #FFF, 60px 45px #FFF, 209px 1228px #FFF, 477px 610px #FFF, 165px 1459px #FFF, 281px 1099px #FFF, 663px 1238px #FFF, 532px 1189px #FFF, 1021px 852px #FFF, 362px 299px #FFF, 1642px 7px #FFF, 1636px 1746px #FFF, 1774px 1729px #FFF, 23px 1061px #FFF, 1092px 644px #FFF, 1457px 1146px #FFF;
+}
+
+.stars3 {
+  width: 3px;
+  height: 3px;
+  background: transparent;
+  box-shadow: 1731px 632px #FFF, 1500px 389px #FFF, 1269px 168px #FFF, 155px 1020px #FFF, 1445px 760px #FFF, 882px 288px #FFF, 1735px 238px #FFF, 1583px 1063px #FFF, 1416px 1250px #FFF, 936px 749px #FFF, 580px 1056px #FFF, 158px 1758px #FFF, 581px 1264px #FFF, 1289px 748px #FFF, 827px 1290px #FFF, 1667px 1319px #FFF, 219px 1744px #FFF, 853px 1827px #FFF, 1604px 572px #FFF, 1651px 1143px #FFF, 1725px 1614px #FFF, 1222px 1765px #FFF, 1642px 1565px #FFF, 1421px 1395px #FFF, 908px 1758px #FFF;
+  animation: animStar 150s linear infinite;
+}
+
+.stars3::after {
+  content: " ";
+  position: absolute;
+  top: 2000px;
+  width: 3px;
+  height: 3px;
+  background: transparent;
+  box-shadow: 1731px 632px #FFF, 1500px 389px #FFF, 1269px 168px #FFF, 155px 1020px #FFF, 1445px 760px #FFF, 882px 288px #FFF, 1735px 238px #FFF, 1583px 1063px #FFF, 1416px 1250px #FFF, 936px 749px #FFF, 580px 1056px #FFF, 158px 1758px #FFF, 581px 1264px #FFF, 1289px 748px #FFF, 827px 1290px #FFF, 1667px 1319px #FFF, 219px 1744px #FFF, 853px 1827px #FFF, 1604px 572px #FFF, 1651px 1143px #FFF, 1725px 1614px #FFF, 1222px 1765px #FFF, 1642px 1565px #FFF, 1421px 1395px #FFF, 908px 1758px #FFF;
+}
+
+.App {
   min-height: 100vh;
+  background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+  z-index: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.App::after {
+  /* Removed external image overlay */
+  content: none;
+}
+
+/* --- Typography & Common Elements --- */
+h2,
+h3 {
+  font-weight: 300;
+  letter-spacing: 1px;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 30px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(5px);
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+/* Primary Action Button (e.g., Join, specific toggles) */
+button.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+}
+
+button.primary:hover {
+  box-shadow: 0 0 20px rgba(118, 75, 162, 0.6);
+}
+
+/* Danger / Stop Button */
+button.danger {
+  background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+  border: none;
+}
+
+button.danger:hover {
+  box-shadow: 0 0 20px rgba(255, 75, 43, 0.6);
+}
+
+
+/* --- Join Screen --- */
+.join-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  height: 100vh;
+  text-align: center;
 }
 
-.App-link {
-  color: #61dafb;
+.join-card {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 40px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  max-width: 400px;
+  width: 90%;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.join-card input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.3s;
 }
 
-/* Theater Mode Styles */
+.join-card input:focus {
+  border-color: #764ba2;
+  box-shadow: 0 0 10px rgba(118, 75, 162, 0.3);
+}
+
+
+/* --- Grid View Layout --- */
+.grid-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.video-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  align-items: center;
+}
+
+.video-wrapper {
+  position: relative;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.video-wrapper:hover {
+  transform: scale(1.02);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.video-wrapper video {
+  display: block;
+  /* remove bottom space */
+  object-fit: cover;
+}
+
+.user-label {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  backdrop-filter: blur(4px);
+}
+
+/* Control Bar (Grid View) */
+.controls-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 15px;
+  border-radius: 50px;
+  margin-top: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+
+/* --- Theater Mode Layout --- */
 .theater-container {
   display: flex;
   width: 100vw;
-  height: 100vh;
-  background-color: #000;
+  height: 100vh !important;
+  background-color: transparent;
+  /* Let body bg show */
   overflow: hidden;
 }
 
 .main-stage {
   flex: 4;
-  background-color: #111;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(5px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   position: relative;
-  border-right: 1px solid #333;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stage-label {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  color: white;
+  background: rgba(118, 75, 162, 0.8);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 15px rgba(118, 75, 162, 0.4);
 }
 
 .reaction-sidebar {
   flex: 1;
-  min-width: 200px;
-  max-width: 300px;
-  background-color: #1a1a1a;
+  min-width: 250px;
+  max-width: 350px;
+  background: rgba(0, 0, 0, 0.8);
   overflow-y: auto;
-  padding: 10px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 15px;
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Scrollbar styling for sidebar */
+/* Sidebar Scrollbar */
 .reaction-sidebar::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
+
 .reaction-sidebar::-webkit-scrollbar-track {
-  background: #111; 
+  background: rgba(255, 255, 255, 0.05);
 }
+
 .reaction-sidebar::-webkit-scrollbar-thumb {
-  background: #444; 
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
 }
+
 .reaction-sidebar::-webkit-scrollbar-thumb:hover {
-  background: #666; 
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Helper for state-based button styles (e.g. muted/unmuted) */
+.btn-active {
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+}
+
+.btn-inactive {
+  background: rgba(255, 65, 108, 0.8);
+  /* Red-ish */
 }
