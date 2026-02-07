@@ -3,7 +3,7 @@ import io from "socket.io-client";
 
 const SIGNALING_SERVER =
   process.env.NODE_ENV === "production"
-    ? "https://meet-app-y8d3.vercel.app/"
+    ? "https://meet-app-d2db.onrender.com"
     : "http://localhost:5000";
 const socket = io(SIGNALING_SERVER);
 
