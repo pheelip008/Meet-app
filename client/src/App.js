@@ -552,7 +552,7 @@ function App() {
 
     if (initiateOffer) {
       try {
-        const offer = await pc.createOffer();
+        const offer = await pc.createOffer({ iceRestart: true }); // FORCE ICE RESTART ON INIT
         await pc.setLocalDescription(offer);
         socket.emit("offer", { targetSocketId, sdp: pc.localDescription });
       } catch (err) {
@@ -563,10 +563,14 @@ function App() {
 
   // handle incoming offer
   async function handleOffer(fromSocketId, sdp, fromUserName) {
+    // If we don't have a peer connection yet, create one
     if (!peersRef.current[fromSocketId]) {
+      // We pass false for initiateOffer because we are answering
       await createPeerConnectionAndOffer(fromSocketId, fromUserName, false);
     }
+
     const entry = peersRef.current[fromSocketId];
+
     // For answerer, ensure we add tracks before creating answer
     const localStream = localStreamRef.current;
     if (localStream) {
@@ -583,6 +587,11 @@ function App() {
       // Check state before setting remote description
       if (entry.pc.signalingState !== "stable" && entry.pc.signalingState !== "have-remote-offer") {
         console.warn("Using setRemoteDescription(offer) but state is", entry.pc.signalingState);
+        // If we are in 'have-local-offer', it means we also sent an offer (glare).
+        // A simple collision resolution strategy is needed.
+        // For now, if we are the 'polite' peer (e.g. smaller ID? or just always yield), we roll back.
+        // But implementing full glare handling is complex.
+        // Let's just log for now.
       }
 
       await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -769,13 +778,16 @@ function App() {
                 ref={(el) => {
                   if (el && el.srcObject !== stream.mediaStream) {
                     el.srcObject = stream.mediaStream;
+                    // EXPLICIT PLAY ATTEMPT
+                    el.play().catch(e => console.error("Remote video play failed:", e));
                   }
                 }}
                 style={{
                   width: inSidebar ? "100%" : "320px",
                   height: inSidebar ? "auto" : "240px",
                   border: stream.type === "screen" ? "2px solid #00f" : "none",
-                  borderRadius: 8
+                  borderRadius: 8,
+                  backgroundColor: "#000" // visually show black box if video missing
                 }}
               />
               {inSidebar && <span className="user-label" style={{ fontSize: "0.7rem", bottom: 5, left: 5 }}>{userName}</span>}
