@@ -151,19 +151,29 @@ io.on("connection", (socket) => {
       socket.to(roomId).emit("user-left", { socketId: socket.id, userName });
     });
     socket.on("renegotiate-offer", ({ targetSocketId, sdp }) => {
+      console.log(`[Signal] Renegotiate Offer from ${socket.id} to ${targetSocketId}`);
       io.to(targetSocketId).emit("renegotiate-offer", { from: socket.id, sdp });
     });
 
     socket.on("renegotiate-answer", ({ targetSocketId, sdp }) => {
+      console.log(`[Signal] Renegotiate Answer from ${socket.id} to ${targetSocketId}`);
       io.to(targetSocketId).emit("renegotiate-answer", { from: socket.id, sdp });
     });
 
     socket.on("share-screen-started", ({ targetSocketId, streamId, trackId }) => {
+      console.log(`[Signal] Screen Share from ${socket.id} to ${targetSocketId}`);
       io.to(targetSocketId).emit("share-screen-started", { from: socket.id, streamId, trackId });
     });
 
     socket.on("share-screen-stopped", ({ targetSocketId }) => {
+      console.log(`[Signal] Screen Share Stopped from ${socket.id} to ${targetSocketId}`);
       io.to(targetSocketId).emit("share-screen-stopped", { from: socket.id });
+    });
+
+    socket.on("sync-request", () => {
+      console.log(`[Signal] Sync Request from ${socket.id}`);
+      // Broadcast to everyone else in the room to please refresh connection to me
+      socket.broadcast.to(roomId).emit("sync-request", { from: socket.id, userName: socket.userName });
     });
 
   });

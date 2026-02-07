@@ -183,6 +183,22 @@ function App() {
       log("🔌 Socket Disconnected");
     });
 
+    socket.on("sync-request", async ({ from, userName }) => {
+      log(`🔄 Received SYNC REQUEST from ${userName || from}`);
+      // Force a fresh connection to this user
+      // 1. Remove old if exists
+      if (peersRef.current[from]) {
+        log(`Re-establishing connection to ${from}...`);
+        peersRef.current[from].pc.close();
+        delete peersRef.current[from];
+        // UI update
+        setRemotePeers(prev => prev.filter(p => p.socketId !== from));
+      }
+
+      // 2. Initiate NEW offer (this works because we are the 'stable' ones in the room)
+      await createPeerConnectionAndOffer(from, userName, true);
+    });
+
     return () => {
       socket.off("connect");
       socket.off("disconnect");
@@ -196,9 +212,31 @@ function App() {
       socket.off("user-left");
       socket.off("share-screen-started");
       socket.off("share-screen-stopped");
+      socket.off("sync-request");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joined, roomId, userName]); // Added deps so re-join works
+
+  // ... (previous code)
+
+  const requestSync = () => {
+    log("🔄 Requesting Connection Sync...");
+    socket.emit("sync-request");
+  };
+
+  // ... (keep existing render)
+
+  return (
+    // ...
+    {/* Add Sync Button to Controls */ }
+          {
+    joined && <button className="control-btn" onClick={requestSync} style={{ background: "#e67e22" }}>
+      🔄 Fix/Sync
+    </button>
+  }
+
+  // ...
+
 
   // Helper to update stream type safely
   const updateStreamType = (socketId, streamId, trackId, newType) => {
