@@ -151,11 +151,19 @@ io.on("connection", (socket) => {
       socket.to(roomId).emit("user-left", { socketId: socket.id, userName });
     });
     socket.on("renegotiate-offer", ({ targetSocketId, sdp }) => {
-    io.to(targetSocketId).emit("renegotiate-offer", { from: socket.id, sdp });
+      io.to(targetSocketId).emit("renegotiate-offer", { from: socket.id, sdp });
     });
 
     socket.on("renegotiate-answer", ({ targetSocketId, sdp }) => {
-    io.to(targetSocketId).emit("renegotiate-answer", { from: socket.id, sdp });
+      io.to(targetSocketId).emit("renegotiate-answer", { from: socket.id, sdp });
+    });
+
+    socket.on("share-screen-started", ({ targetSocketId, streamId }) => {
+      io.to(targetSocketId).emit("share-screen-started", { from: socket.id, streamId });
+    });
+
+    socket.on("share-screen-stopped", ({ targetSocketId }) => {
+      io.to(targetSocketId).emit("share-screen-stopped", { from: socket.id });
     });
 
   });
