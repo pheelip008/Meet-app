@@ -374,13 +374,32 @@ function App() {
       const alreadyHas = currentEntry.streams.some((s) => s.mediaStream.id === stream.id);
 
       if (!alreadyHas) {
-        // STRICT TAGGING LOGIC:
-        // Check if explicitly marked as screen share (check Stream ID OR Track ID)
-        const isScreen = screenShareIds.current.has(stream.id) || (track && screenShareIds.current.has(track.id));
-        const type = isScreen ? "screen" : "camera";
+        // --- SCREEN SHARE DETECTION LOGIC ---
+        let type = "camera";
 
-        console.log(`NEW TRACK: Stream ${stream.id}, Track ${track?.id}, type inferred as: ${type}`);
-        log(`New Video Track: ${type.toUpperCase()}`);
+        // 1. Strict Signal Check
+        // Check if explicitly marked as screen share (check Stream ID OR Track ID)
+        const isExplicityScreen = screenShareIds.current.has(stream.id) || (track && screenShareIds.current.has(track.id));
+
+        if (isExplicityScreen) {
+          type = "screen";
+          console.log(`✅ Strict ID Match for Screen Share: ${stream.id}`);
+        } else {
+          // 2. Heuristic Check (Fallback)
+          // If this user ALREADY has a video stream (camera), and this is a NEW video track, it's likely a screen share.
+          const existingVideoStreams = currentEntry.streams.filter(s => s.mediaStream.getVideoTracks().length > 0);
+          const isVideo = stream.getVideoTracks().length > 0;
+
+          if (isVideo && existingVideoStreams.length >= 1) {
+            type = "screen";
+            console.warn(`⚠️ strict ID match failed, but HEURISTIC detected Screen Share (2nd video stream). Stream: ${stream.id}`);
+            // Auto-add to our known screen share set to prevent flipping back
+            screenShareIds.current.add(stream.id);
+          }
+        }
+
+        console.log(`NEW TRACK from ${targetSocketId}: Stream ${stream.id}, Track ${track?.id}, Inferred Type: ${type.toUpperCase()}`);
+        log(`New Track: ${type.toUpperCase()} from ${targetSocketId.substr(0, 4)}`);
 
         const newStreamObj = {
           id: stream.id,
@@ -412,6 +431,8 @@ function App() {
             if (track) screenShareIds.current.delete(track.id);
           }
         };
+      } else {
+        console.log(`Duplicate stream ignored: ${stream.id}`);
       }
 
       // Update UI state
