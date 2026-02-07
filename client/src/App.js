@@ -39,10 +39,13 @@ function App() {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
+  const [debugLogs, setDebugLogs] = useState([]);
+
   // Helper log
   const log = (msg) => {
     console.log(msg);
-    setStatus(prev => msg); // Simple overwrite for latest status
+    setStatus(msg); // Simple overwrite for latest status
+    setDebugLogs(prev => [msg, ...prev].slice(0, 20)); // Keep last 20 logs
   };
 
   // Signaling listeners
@@ -66,6 +69,7 @@ function App() {
     });
 
     socket.on("answer", async ({ from, sdp }) => {
+      log(`Received answer from ${from}`);
       const entry = peersRef.current[from];
       if (entry) {
         if (entry.pc.signalingState === "have-local-offer" || entry.pc.signalingState === "have-remote-pranswer") {
@@ -88,32 +92,43 @@ function App() {
     });
 
     socket.on("renegotiate-offer", async ({ from, sdp }) => {
+      log(`📩 RENEGOTIATE OFFER from ${from}`);
       const entry = peersRef.current[from];
       if (!entry) return;
-      console.log("Renegotiating Offer from", from);
+      console.log("Renegotiating Offer from", from.substr(0, 4));
 
       // Verify state before processing
       if (entry.pc.signalingState !== "stable" && entry.pc.signalingState !== "have-remote-offer") {
         console.warn("⚠️ Renegotiation Offer received but state is:", entry.pc.signalingState);
+        log(`⚠️ State mismatch: ${entry.pc.signalingState}`);
       }
 
-      await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-      const answer = await entry.pc.createAnswer();
-      await entry.pc.setLocalDescription(answer);
+      try {
+        await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        const answer = await entry.pc.createAnswer();
+        await entry.pc.setLocalDescription(answer);
 
-      socket.emit("renegotiate-answer", {
-        targetSocketId: from,
-        sdp: entry.pc.localDescription,
-      });
+        socket.emit("renegotiate-answer", {
+          targetSocketId: from,
+          sdp: entry.pc.localDescription,
+        });
+        log(`✅ Sent RENEGOTIATE ANSWER to ${from}`);
+      } catch (err) {
+        console.error("Renegotiation failed:", err);
+        log(`❌ Renegotiation failed: ${err.message}`);
+      }
     });
 
     socket.on("renegotiate-answer", async ({ from, sdp }) => {
+      log(`📩 RENEGOTIATE ANSWER from ${from}`);
       const entry = peersRef.current[from];
       if (entry) {
         if (entry.pc.signalingState === "have-local-offer") {
           await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          log(`✅ RENEGOTIATION COMPLETE with ${from}`);
         } else {
           console.warn("⚠️ Renegotiation Answer received but state is:", entry.pc.signalingState);
+          log(`⚠️ State mismatch answer: ${entry.pc.signalingState}`);
         }
       }
     });
@@ -569,6 +584,8 @@ function App() {
       // Add the screen track to all peers and renegotiate
       for (const peerId in peersRef.current) {
         const pc = peersRef.current[peerId].pc;
+        log(`Adding screen track to ${peerId} (Current State: ${pc.signalingState})`);
+
         // addTrack sends the stream to the other side
         pc.addTrack(screenTrack, displayStream);
 
@@ -580,11 +597,13 @@ function App() {
           streamId: displayStream.id,
           trackId: screenTrack.id
         });
+        log(`Sent SHARE_SCREEN_STARTED signal to ${peerId}`);
 
         // Negotiate the new track
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit("renegotiate-offer", { targetSocketId: peerId, sdp: pc.localDescription });
+        log(`Sent RENEGOTIATE OFFER to ${peerId}`);
       }
 
       // Local screen preview
@@ -860,8 +879,8 @@ function App() {
         <div>Socket: {socket.id}</div>
         <div>Remote Peers: {remotePeers.length}</div>
         <div>Screen Share: {isScreenSharing ? "ON" : "OFF"}</div>
-        <div style={{ maxHeight: 100, overflowY: "auto" }}>
-          Peers: {remotePeers.map(p => p.socketId.substr(0, 4)).join(", ")}
+        <div style={{ maxHeight: 150, overflowY: "auto", marginTop: 5, borderTop: "1px solid #333" }}>
+          {debugLogs.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       </div>
 
