@@ -759,6 +759,11 @@ function App() {
     }
   }
 
+  const requestSync = () => {
+    log("🔄 Requesting Connection Sync...");
+    socket.emit("sync-request");
+  };
+
   // Determine view mode
   // The layout switching logic depends on `screenShareStream` being found
   const screenShareStream = remotePeers.flatMap(p => p.streams).find(s => s.type === "screen");
@@ -870,6 +875,9 @@ function App() {
             ) : (
               <button className="danger" onClick={stopScreenShare} style={{ width: "100%", fontSize: "0.8rem", padding: "8px" }}>⛔ Stop Share</button>
             )}
+            <button className="control-btn" onClick={requestSync} style={{ flex: 1, fontSize: "0.8rem", padding: "8px", background: "#e67e22" }}>
+              🔄 Fix/Sync
+            </button>
           </div>
 
           {/* Remote Cameras */}
@@ -901,6 +909,9 @@ function App() {
         ) : (
           <button className="danger" onClick={stopScreenShare}>⛔ Stop Sharing</button>
         )}
+        <button className="control-btn" onClick={requestSync} style={{ background: "#e67e22" }}>
+          🔄 Fix/Sync
+        </button>
       </div>
 
       <div className="video-grid">
