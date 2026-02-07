@@ -125,31 +125,47 @@ io.on("connection", (socket) => {
     socket.emit("existing-users", otherUsers);
 
     socket.on("offer", (payload) => {
-      const { targetSocketId, sdp } = payload;
+      const { targetSocketId, sdp, isScreen } = payload;
       io.to(targetSocketId).emit("offer", {
-        from: socket.id,
+        from: isScreen ? `${socket.id}-screen` : socket.id,
         sdp,
-        userName: socket.userName,
+        userName: isScreen ? `${socket.userName} (Screen)` : socket.userName,
+        isScreen
       });
     });
 
     socket.on("answer", (payload) => {
-      const { targetSocketId, sdp } = payload;
-      io.to(targetSocketId).emit("answer", { from: socket.id, sdp });
+      const { targetSocketId, sdp, isScreen } = payload;
+      io.to(targetSocketId).emit("answer", {
+        from: isScreen ? `${socket.id}-screen` : socket.id,
+        sdp,
+        isScreen
+      });
     });
 
     socket.on("ice-candidate", (payload) => {
-      const { targetSocketId, candidate } = payload;
+      const { targetSocketId, candidate, isScreen } = payload;
       io.to(targetSocketId).emit("ice-candidate", {
-        from: socket.id,
+        from: isScreen ? `${socket.id}-screen` : socket.id,
         candidate,
+        isScreen
       });
     });
 
     socket.on("disconnect", () => {
       console.log(`${userName} disconnected (${socket.id})`);
       socket.to(roomId).emit("user-left", { socketId: socket.id, userName });
+      // Also disconnect screen if exists (though usually client sends specific event)
+      socket.to(roomId).emit("user-left", { socketId: `${socket.id}-screen`, userName: `${userName} (Screen)` });
     });
+
+    // Explicit screen share disconnect
+    socket.on("disconnect-screen", () => {
+      console.log(`Screen disconnect from ${socket.id}`);
+      socket.to(roomId).emit("user-left", { socketId: `${socket.id}-screen`, userName: `${socket.userName} (Screen)` });
+    });
+
+    // Renegotiation (Legacy/Camera only)
     socket.on("renegotiate-offer", ({ targetSocketId, sdp }) => {
       console.log(`[Signal] Renegotiate Offer from ${socket.id} to ${targetSocketId}`);
       io.to(targetSocketId).emit("renegotiate-offer", { from: socket.id, sdp });
@@ -160,19 +176,9 @@ io.on("connection", (socket) => {
       io.to(targetSocketId).emit("renegotiate-answer", { from: socket.id, sdp });
     });
 
-    socket.on("share-screen-started", ({ targetSocketId, streamId, trackId }) => {
-      console.log(`[Signal] Screen Share from ${socket.id} to ${targetSocketId}`);
-      io.to(targetSocketId).emit("share-screen-started", { from: socket.id, streamId, trackId });
-    });
-
-    socket.on("share-screen-stopped", ({ targetSocketId }) => {
-      console.log(`[Signal] Screen Share Stopped from ${socket.id} to ${targetSocketId}`);
-      io.to(targetSocketId).emit("share-screen-stopped", { from: socket.id });
-    });
-
+    // Sync
     socket.on("sync-request", () => {
       console.log(`[Signal] Sync Request from ${socket.id}`);
-      // Broadcast to everyone else in the room to please refresh connection to me
       socket.broadcast.to(roomId).emit("sync-request", { from: socket.id, userName: socket.userName });
     });
 
