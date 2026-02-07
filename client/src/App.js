@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 
-const SIGNALING_SERVER = "http://localhost:5000";
+const SIGNALING_SERVER =
+  process.env.NODE_ENV === "production"
+    ? "https://meet-app-y8d3.vercel.app/"
+    : "http://localhost:5000";
 const socket = io(SIGNALING_SERVER);
 
 const ICE_CONFIG = {
