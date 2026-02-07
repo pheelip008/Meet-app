@@ -320,3 +320,50 @@ button.danger:hover {
   background: rgba(255, 65, 108, 0.8);
   /* Red-ish */
 }
+
+/* --- Mobile / Responsive Tweaks --- */
+@media (max-width: 768px) {
+  .theater-container {
+    flex-direction: column;
+  }
+
+  .main-stage {
+    flex: 2;
+    /* Take up more space for screen share */
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .reaction-sidebar {
+    flex: 1;
+    min-width: 100%;
+    /* Full width */
+    max-width: 100%;
+    border-left: none;
+    flex-direction: row;
+    /* Show peers in a horizontal scroll row */
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  /* Adjust sidebar items for horizontal layout */
+  .reaction-sidebar .video-wrapper {
+    min-width: 120px;
+    width: 120px !important;
+    /* Force small width */
+    height: 90px;
+    margin-bottom: 0 !important;
+  }
+
+  /* Hide controls in scrolling sidebar if they take too much space, or make them compact */
+  .reaction-sidebar>div:nth-child(2) {
+    /* This targets the controls div */
+    min-width: 100%;
+    /* Force it to break row if needed, or stick to top */
+    position: sticky;
+    left: 0;
+  }
+}
