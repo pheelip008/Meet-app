@@ -25,11 +25,13 @@ function App() {
   const screenStreamRef = useRef(null); // keep track of the screen stream
   const cameraPreviewRef = useRef(); // to restore camera preview
 
+  // Track which streams are screen shares explicitly by ID
+  const screenShareIds = useRef(new Set());
 
 
   const [cameraReady, setCameraReady] = useState(false);
 
-  // Signaling listeners (unchanged)
+  // Signaling listeners
   useEffect(() => {
     socket.on("existing-users", async (users) => {
       setStatus("Found existing users: " + users.map((u) => u.userName).join(", "));
@@ -70,6 +72,7 @@ function App() {
         }
       }
     });
+
     socket.on("renegotiate-offer", async ({ from, sdp }) => {
       const entry = peersRef.current[from];
       if (!entry) return;
@@ -109,6 +112,36 @@ function App() {
       removePeer(socketId);
     });
 
+    // NEW LISTENER: Explicit screen share started
+    socket.on("share-screen-started", ({ from, streamId }) => {
+      console.log(`🖥️ User ${from} started sharing screen with stream ID: ${streamId}`);
+      screenShareIds.current.add(streamId);
+
+      // Update stream type in ref and state if stream already exists
+      updateStreamType(from, streamId, "screen");
+    });
+
+    // NEW LISTENER: Explicit screen share stopped
+    socket.on("share-screen-stopped", ({ from }) => {
+      console.log(`🛑 User ${from} stopped sharing screen`);
+      // We might not know the exact ID if it was removed, but we can clean up
+      // Actually, better to just remove any "screen" type streams for that user or wait for track removal.
+      // But for "type" updating, we should revert any screen streams.
+
+      // In practice, track removal handles the cleanup of the stream object itself.
+      // This signal is useful if we want to force UI updates or clean up our ID set.
+
+      // Let's find the screen stream for this user and remove it from our set
+      const peer = peersRef.current[from];
+      if (peer) {
+        peer.streams.forEach(s => {
+          if (s.type === "screen") {
+            screenShareIds.current.delete(s.id);
+          }
+        });
+      }
+    });
+
 
     return () => {
       socket.off("existing-users");
@@ -116,14 +149,39 @@ function App() {
       socket.off("offer");
       socket.off("answer");
       socket.off("ice-candidate");
-      socket.off("renegotiate-offer"); // cleaned new listeners
+      socket.off("renegotiate-offer");
       socket.off("renegotiate-answer");
       socket.off("user-left");
+      socket.off("share-screen-started");
+      socket.off("share-screen-stopped");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reliable local camera acquisition + attach
+  // Helper to update stream type safely
+  const updateStreamType = (socketId, streamId, newType) => {
+    // 1. Update Ref
+    const entry = peersRef.current[socketId];
+    if (entry) {
+      const streamObj = entry.streams.find(s => s.id === streamId);
+      if (streamObj) {
+        streamObj.type = newType;
+      }
+    }
+
+    // 2. Update State
+    setRemotePeers(prev => prev.map(p => {
+      if (p.socketId === socketId) {
+        return {
+          ...p,
+          streams: p.streams.map(s => s.id === streamId ? { ...s, type: newType } : s)
+        };
+      }
+      return p;
+    }));
+  };
+
+  // reliable local camera acquisition + attach
   useEffect(() => {
     let intervalId = null;
     async function getMedia() {
@@ -277,10 +335,12 @@ function App() {
       const alreadyHas = currentEntry.streams.some((s) => s.mediaStream.id === stream.id);
 
       if (!alreadyHas) {
-        // Logic: 1st stream = Camera, 2nd stream = Screen
-        // Note: This heuristic assumes camera is always first. 
-        // With addTrack, both persist.
-        const type = currentEntry.streams.length === 0 ? "camera" : "screen";
+        // STRICT TAGGING LOGIC:
+        // Check if explicitly marked as screen share
+        const isScreen = screenShareIds.current.has(stream.id);
+        const type = isScreen ? "screen" : "camera";
+
+        console.log(`NEW TRACK: Stream ${stream.id}, type inferred as: ${type}`);
 
         const newStreamObj = {
           id: stream.id,
@@ -307,6 +367,8 @@ function App() {
             });
             // Also update currentEntry ref
             currentEntry.streams = currentEntry.streams.filter(s => s.id !== stream.id);
+            // also remove from our ID set to be clean
+            screenShareIds.current.delete(stream.id);
           }
         };
       }
@@ -442,34 +504,10 @@ function App() {
   //     });
 
   //     const screenTrack = displayStream.getVideoTracks()[0];
-
-  //     // Replace outgoing video track for all peers
-  //     for (const peerId in peersRef.current) {
-  //       const sender = peersRef.current[peerId].pc
-  //         .getSenders()
-  //         .find((s) => s.track && s.track.kind === "video");
-  //       if (sender) sender.replaceTrack(screenTrack);
-  //     }
-
-  //     // Update local video preview to show shared screen
-  //     if (localVideoRef.current) {
-  //       localVideoRef.current.srcObject = displayStream;
-  //       await localVideoRef.current.play().catch(() => {});
-  //     }
-
-  //     setIsScreenSharing(true);
-
-  //     // If user stops sharing via browser controls
-  //     screenTrack.onended = () => {
-  //       stopScreenShare();
-  //     };
-
-  //     console.log("✅ Screen sharing started");
-  //   } catch (err) {
-  //     console.error("🚫 Screen sharing failed:", err);
-  //     alert("Screen share failed: " + err.message);
-  //   }
+  //     // ...
+  //   } catch (err) { ... }
   // }
+
   async function startScreenShare() {
     try {
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
@@ -485,6 +523,13 @@ function App() {
         const pc = peersRef.current[peerId].pc;
         // addTrack sends the stream to the other side
         pc.addTrack(screenTrack, displayStream);
+
+        // EXPLICIT SIGNAL: Tell peer this stream is a screen share
+        // We do this BEFORE renegotiation to ensure they have the ID mapping
+        socket.emit("share-screen-started", {
+          targetSocketId: peerId,
+          streamId: displayStream.id
+        });
 
         // Negotiate the new track
         const offer = await pc.createOffer();
@@ -532,6 +577,9 @@ function App() {
         const pc = peersRef.current[peerId].pc;
         const senders = pc.getSenders();
 
+        // Notify STOP
+        socket.emit("share-screen-stopped", { targetSocketId: peerId });
+
         // Find senders that are NOT the camera (localStreamRef)
         // We assume any video sender that isn't the camera is the screen share
         const cameraTrackId = localStreamRef.current?.getVideoTracks()[0]?.id;
@@ -572,32 +620,12 @@ function App() {
 
   // function stopScreenShare() {
   //   try {
-  //     const camStream = localStreamRef.current;
-  //     if (!camStream) return;
-
-  //     const camTrack = camStream.getVideoTracks()[0];
-
-  //     // Replace outgoing video track back to camera
-  //     for (const peerId in peersRef.current) {
-  //       const sender = peersRef.current[peerId].pc
-  //         .getSenders()
-  //         .find((s) => s.track && s.track.kind === "video");
-  //       if (sender) sender.replaceTrack(camTrack);
-  //     }
-
-  //     // Update local preview
-  //     if (localVideoRef.current) {
-  //       localVideoRef.current.srcObject = camStream;
-  //     }
-
-  //     setIsScreenSharing(false);
-  //     console.log("⛔ Screen sharing stopped, camera restored");
-  //   } catch (err) {
-  //     console.error("⚠️ Error stopping screen share:", err);
-  //   }
+  //     // ...
+  //   } catch (err) { ... }
   // }
 
   // Determine view mode
+  // The layout switching logic depends on `screenShareStream` being found
   const screenShareStream = remotePeers.flatMap(p => p.streams).find(s => s.type === "screen");
   const isTheaterMode = !!screenShareStream || isScreenSharing;
 
@@ -790,6 +818,3 @@ function App() {
 }
 
 export default App;
-
-
-
