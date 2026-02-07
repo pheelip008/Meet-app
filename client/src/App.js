@@ -32,8 +32,7 @@ function App() {
   const screenStreamRef = useRef(null); // keep track of the screen stream
   const cameraPreviewRef = useRef(); // to restore camera preview
 
-  // Track which streams/tracks are screen shares explicitly by ID
-  const screenShareIds = useRef(new Set()); // Stores stream IDs AND track IDs
+
 
   const [cameraReady, setCameraReady] = useState(false);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
