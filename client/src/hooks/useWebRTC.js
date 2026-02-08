@@ -120,7 +120,7 @@ export default function useWebRTC(roomId, userName) {
     const createPeerConnection = useCallback(async (targetId, targetUserName, initiateOffer, type) => {
         const pc = new RTCPeerConnection(ICE_CONFIG);
         const isScreen = type === "screen";
-        const queueKey = `${targetId}_${type}`;
+
 
         // Add Tracks (Local Stream)
         const stream = isScreen ? screenStreamRef.current : localStreamRef.current;
