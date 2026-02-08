@@ -2,40 +2,43 @@ import React, { useEffect, useRef, useState } from "react";
 import "./App.css";
 import useWebRTC from "./hooks/useWebRTC";
 
+
+// Helper Component for robust video rendering
+const VideoPlayer = ({ stream, isLocal = false, isScreen = false, style = {}, ...props }) => {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el && stream) {
+      el.srcObject = stream;
+      if (isLocal && !isScreen) {
+        el.muted = true; // Always mute local camera
+      }
+      // Force play
+      el.play().catch(e => console.error("Video play error:", e));
+    } else if (el) {
+      el.srcObject = null;
+    }
+  }, [stream, isLocal, isScreen]);
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      style={style}
+      {...props}
+    />
+  );
+};
+
 function App() {
   const [roomId, setRoomId] = useState("");
   const [userName, setUserName] = useState("");
 
 
 
-  // Helper Component for robust video rendering
-  const VideoPlayer = ({ stream, isLocal = false, isScreen = false, style = {}, ...props }) => {
-    const videoRef = useRef(null);
 
-    useEffect(() => {
-      const el = videoRef.current;
-      if (el && stream) {
-        el.srcObject = stream;
-        if (isLocal && !isScreen) {
-          el.muted = true; // Always mute local camera
-        }
-        // Force play
-        el.play().catch(e => console.error("Video play error:", e));
-      } else if (el) {
-        el.srcObject = null;
-      }
-    }, [stream, isLocal, isScreen]);
-
-    return (
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        style={style}
-        {...props}
-      />
-    );
-  };
 
 
   // Use Custom Hook
