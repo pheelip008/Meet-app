@@ -162,7 +162,7 @@ export default function useWebRTC(roomId, userName) {
         }
 
         return pc;
-    }, [handleTrackEvent, restartIce, addPeerToUI]);
+    }, [handleTrackEvent, restartIce, addPeerToUI, userName]);
 
     const handleOffer = useCallback(async (fromId, sdp, type, fromUserName) => {
         const isScreen = type === "screen";
