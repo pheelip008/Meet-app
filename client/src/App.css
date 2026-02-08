@@ -367,35 +367,3 @@ button.danger:hover {
     left: 0;
   }
 }
-
-/* --- Loading Screen (New) --- */
-.loading-screen {
-  color: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  width: 100%;
-  min-height: 200px;
-}
-
-.spinner {
-  border: 4px solid rgba(255, 255, 255, 0.1);
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border-left-color: #764ba2;
-  animation: spin 1s linear infinite;
-  margin-bottom: 20px;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
-}

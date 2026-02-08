@@ -298,14 +298,14 @@ export default function useWebRTC(roomId, userName) {
             pc = standardPeers.current[fromId]?.pc;
         }
 
-        if (pc) {
+        if (pc && pc.remoteDescription) {
             try {
                 await pc.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (err) {
                 console.warn("ICE Add Failed", err);
             }
         } else {
-            console.log(`Queueing ICE candidate for ${queueKey}`);
+            console.log(`Queueing ICE candidate for ${queueKey} (PC Not Ready)`);
             if (!iceCandidateQueue.current[queueKey]) iceCandidateQueue.current[queueKey] = [];
             iceCandidateQueue.current[queueKey].push(candidate);
         }
