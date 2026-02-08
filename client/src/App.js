@@ -86,19 +86,26 @@ function App() {
     socket.on("answer", async ({ from, sdp, isScreen }) => {
       log(`Received answer from ${from} (isScreen: ${isScreen})`);
 
-      // Determine which PC to use
       let entry = null;
-      if (isScreen || from.includes("-screen")) {
-        // It's an answer to our screen share offer!
-        // The 'from' might be the real socket ID (if server stripped it) or virtual ID.
-        // We stored it in screenPCRef using the target's real ID.
-        const realTargetId = from.replace("-screen", "");
+
+      // FIX: Distinguish between "Answer to my screen share" vs "Answer from a virtual peer"
+      // If 'from' has -screen, it is a Virtual Peer sending us something (unlikely for ANSWER, but possible in some flows).
+      // If 'from' is a normal user BUT isScreen is true, it is an ANSWER to my screen share.
+
+      if (from.includes("-screen")) {
+        // This is a message FROM a virtual peer. Route to standard peersRef.
+        entry = peersRef.current[from];
+      } else if (isScreen) {
+        // This is a message FROM a real user, in response to MY screen share. 
+        // Route to screenPCRef.
+        const realTargetId = from.replace("-screen", ""); // Should be same as from, but safety first
         const pc = screenPCRef.current ? screenPCRef.current[realTargetId] : null;
         if (pc) {
-          entry = { pc }; // Mock entry for below logic
+          entry = { pc };
           console.log("Found Screen PC for answer from", realTargetId);
         }
       } else {
+        // Normal camera answer
         entry = peersRef.current[from];
       }
 
@@ -120,7 +127,12 @@ function App() {
     socket.on("ice-candidate", async ({ from, candidate, isScreen }) => {
       let entry = null;
 
-      if (isScreen || from.includes("-screen")) {
+      // FIX: Same logic as Answer
+      if (from.includes("-screen")) {
+        // Candidate FROM a screen shaer (Virtual Peer) -> peersRef
+        entry = peersRef.current[from];
+      } else if (isScreen) {
+        // Candidate FROM a viewer of MY screen share -> screenPCRef
         const realTargetId = from.replace("-screen", "");
         const pc = screenPCRef.current ? screenPCRef.current[realTargetId] : null;
         if (pc) {
