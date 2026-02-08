@@ -34,9 +34,13 @@ function App() {
 
 
 
+
   const [cameraReady, setCameraReady] = useState(false);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+
+  // Screen Share PC Reference (Moved to top level)
+  const screenPCRef = useRef(null);
 
   const [debugLogs, setDebugLogs] = useState([]);
 
