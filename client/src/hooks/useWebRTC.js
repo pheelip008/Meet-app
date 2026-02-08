@@ -186,12 +186,6 @@ export default function useWebRTC(roomId, userName) {
 
     const handleOffer = useCallback(async (fromId, sdp, type, fromUserName) => {
         const isScreen = type === "screen";
-        const queueKey = `${fromId}_${isScreen ? "incoming_screen" : "camera"}`;
-        // Note: For incoming screen, we use a specific type key logic to match handleIceCandidate?
-        // Actually, handleIceCandidate uses just "screen". 
-        // Let's standardize keys. 
-        // Camera: `${fromId}_camera`
-        // Screen: `${fromId}_screen` (Incoming)
 
         let pc;
 
