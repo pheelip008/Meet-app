@@ -1,98 +1,12 @@
-/*                                                                                                                                                                                 
-
-Phase 1: Basic room join/leave notifications only
-
-   - User joins a room
-   - User leaves a room
-   - Notify other users in the room
-   - Send existing users list to new user
-
-
-
-
-
-
-*/
-// const express = require('express');
-// const http = require('http');
-// const { Server } = require('socket.io');
-// const cors = require('cors');
-
-// const app = express();
-// const server = http.createServer(app);
-
-// app.use(cors());
-
-// const io = new Server(server, {
-//   cors: {
-//     origin: "http://localhost:3000", // React dev server
-//     methods: ["GET", "POST"]
-//   }
-// });
-
-// io.on("connection", (socket) => {
-//   console.log("New user connected:", socket.id);
-
-//   socket.on("join-room", (roomId, userName) => {
-//     socket.join(roomId);
-//     console.log(`${userName} joined room ${roomId}`);
-
-//     // Tell *existing* users that a new one joined
-//     socket.to(roomId).emit("user-joined", userName);
-
-//     // Tell the *new* user who else is already in the room
-//     const otherUsers = [];
-//     const clients = io.sockets.adapter.rooms.get(roomId);
-//     if (clients) {
-//       clients.forEach((clientId) => {
-//         if (clientId !== socket.id) {
-//           const clientSocket = io.sockets.sockets.get(clientId);
-//           if (clientSocket && clientSocket.userName) {
-//             otherUsers.push(clientSocket.userName);
-//           }
-//         }
-//       });
-//     }
-
-//     socket.emit("existing-users", otherUsers);
-
-//     // Save the username on the socket object
-//     socket.userName = userName;
-
-//     // Handle user disconnect
-//     socket.on("disconnect", () => {
-//       console.log(`${userName} disconnected`);
-//       socket.to(roomId).emit("user-left", userName);
-//     });
-//   });
-// });
-
-
-// const PORT = 5000;
-// server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-// server/index.js
-
-/*                                                                                                                                                                                 
-
-Phase 2: Add signaling for WebRTC peer connections
-
-
-
-*/
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 
 const app = express();
-const server = http.createServer(app);
-
 app.use(cors());
 
-app.get("/", (req, res) => {
-  res.send("WebRTC signaling server is running!");
-});
-
+const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -100,107 +14,155 @@ const io = new Server(server, {
   },
 });
 
+// --- State Management ---
+// We keep it simple: Just an array of users for the room.
+// In a real app, this would be a Map or Redis.
+// Users: { socketId, userName, isScreen }
+let users = [];
+
 io.on("connection", (socket) => {
-  console.log("New user connected:", socket.id);
+  console.log(`🔌 Socket Connected: ${socket.id}`);
 
   socket.on("join-room", (roomId, userName) => {
+    // 1. Join the socket room
     socket.join(roomId);
-    socket.userName = userName;
-    console.log(`${userName} joined room ${roomId} (${socket.id})`);
 
+    // 2. Store user info
+    // We treat every connection as a user.
+    // Real users have isScreen: false (implicit).
+    // Screen shares will explicitly NOT join via 'join-room' usually, 
+    // but if they did, we'd handle it. 
+    // Actually, our client logic for screen share is:
+    // It creates a *new* connection but DOES NOT emit 'join-room'.
+    // Instead it just starts offering. 
+    // WAIT! The standard WebRTC pattern is:
+    // 1. Join Room (to announce presence).
+    // 2. Receive 'existing-users'.
+    // 3. Connect.
+
+    // For "Virtual Screen Peer", the client *could* emit join-room with "(Screen)" name.
+    // Let's support that for maximum robustness.
+
+    const user = { socketId: socket.id, userName, roomId };
+    users.push(user);
+
+    console.log(`👤 ${userName} joined room ${roomId}`);
+
+    // 3. Send existing users to the new joiner
+    const others = users.filter((u) => u.socketId !== socket.id && u.roomId === roomId);
+    socket.emit("existing-users", others);
+
+    // 4. Notify others
     socket.to(roomId).emit("user-joined", { socketId: socket.id, userName });
-
-    const clients = io.sockets.adapter.rooms.get(roomId) || new Set();
-    const otherUsers = [];
-    clients.forEach((clientId) => {
-      if (clientId !== socket.id) {
-        const s = io.sockets.sockets.get(clientId);
-        otherUsers.push({
-          socketId: clientId,
-          userName: s ? s.userName : "Unknown",
-        });
-      }
-    });
-
-    socket.emit("existing-users", otherUsers);
-
-    socket.on("offer", (payload) => {
-      const { targetSocketId, sdp, isScreen } = payload;
-      io.to(targetSocketId).emit("offer", {
-        from: isScreen ? `${socket.id}-screen` : socket.id,
-        sdp,
-        userName: isScreen ? `${socket.userName} (Screen)` : socket.userName,
-        isScreen
-      });
-    });
-
-    socket.on("answer", (payload) => {
-      let { targetSocketId, sdp, isScreen } = payload;
-
-      // Fix routing: If target is a virtual screen peer, route to the real socket
-      let realTargetId = targetSocketId;
-      if (targetSocketId && targetSocketId.endsWith("-screen")) {
-        realTargetId = targetSocketId.replace("-screen", "");
-        // If we are answering a screen, we must ensure the sender knows it's about the screen
-        isScreen = true;
-      }
-
-      io.to(realTargetId).emit("answer", {
-        from: isScreen ? `${socket.id}-screen` : socket.id,
-        sdp,
-        isScreen
-      });
-    });
-
-    socket.on("ice-candidate", (payload) => {
-      let { targetSocketId, candidate, isScreen } = payload;
-
-      // Fix routing
-      let realTargetId = targetSocketId;
-      if (targetSocketId && targetSocketId.endsWith("-screen")) {
-        realTargetId = targetSocketId.replace("-screen", "");
-        isScreen = true;
-      }
-
-      io.to(realTargetId).emit("ice-candidate", {
-        from: isScreen ? `${socket.id}-screen` : socket.id,
-        candidate,
-        isScreen
-      });
-    });
-
-    socket.on("disconnect", () => {
-      console.log(`${userName} disconnected (${socket.id})`);
-      socket.to(roomId).emit("user-left", { socketId: socket.id, userName });
-      // Also disconnect screen if exists (though usually client sends specific event)
-      socket.to(roomId).emit("user-left", { socketId: `${socket.id}-screen`, userName: `${userName} (Screen)` });
-    });
-
-    // Explicit screen share disconnect
-    socket.on("disconnect-screen", () => {
-      console.log(`Screen disconnect from ${socket.id}`);
-      socket.to(roomId).emit("user-left", { socketId: `${socket.id}-screen`, userName: `${socket.userName} (Screen)` });
-    });
-
-    // Renegotiation (Legacy/Camera only)
-    socket.on("renegotiate-offer", ({ targetSocketId, sdp }) => {
-      console.log(`[Signal] Renegotiate Offer from ${socket.id} to ${targetSocketId}`);
-      io.to(targetSocketId).emit("renegotiate-offer", { from: socket.id, sdp });
-    });
-
-    socket.on("renegotiate-answer", ({ targetSocketId, sdp }) => {
-      console.log(`[Signal] Renegotiate Answer from ${socket.id} to ${targetSocketId}`);
-      io.to(targetSocketId).emit("renegotiate-answer", { from: socket.id, sdp });
-    });
-
-    // Sync
-    socket.on("sync-request", () => {
-      console.log(`[Signal] Sync Request from ${socket.id}`);
-      socket.broadcast.to(roomId).emit("sync-request", { from: socket.id, userName: socket.userName });
-    });
-
   });
+
+  // --- Signaling Primitives ---
+  // We strictly route by targetSocketId.
+  // We invoke the 'isScreen' flag to help the client, but the server just passes it through.
+
+  socket.on("offer", ({ targetSocketId, sdp, isScreen, userName }) => {
+    io.to(targetSocketId).emit("offer", {
+      from: socket.id,
+      sdp,
+      isScreen,
+      userName // Sender's username (useful for the receiver to identify "Pheel (Screen)")
+    });
+  });
+
+  socket.on("answer", ({ targetSocketId, sdp, isScreen }) => {
+    io.to(targetSocketId).emit("answer", {
+      from: socket.id,
+      sdp,
+      isScreen
+    });
+  });
+
+  socket.on("ice-candidate", ({ targetSocketId, candidate, isScreen }) => {
+    io.to(targetSocketId).emit("ice-candidate", {
+      from: socket.id,
+      candidate,
+      isScreen
+    });
+  });
+
+  // --- Disconnect Handling ---
+  socket.on("disconnect", () => {
+    console.log(`❌ Disconnected: ${socket.id}`);
+    const userIndex = users.findIndex((u) => u.socketId === socket.id);
+
+    if (userIndex !== -1) {
+      const user = users[userIndex];
+      // Notify room
+      socket.to(user.roomId).emit("user-left", { socketId: socket.id, userName: user.userName });
+      // Remove from state
+      users.splice(userIndex, 1);
+    }
+  });
+
+  // Explicit Screen Disconnect (if client wants to manually close just the screen peer)
+  socket.on("disconnect-screen", () => {
+    // If the client manages the screen socket separately, 'disconnect' above handles it.
+    // If the client re-uses the socket (multiplexing), we need this.
+    // BUT: Our new architecture uses a NEW connection for screen share.
+    // So 'disconnect' above is sufficient IF the screen share socket actually disconnects.
+    // If the client just calls .close() on the PC but keeps the socket? 
+    // No, the instruction was "New RTCPeerConnection".
+    // Wait, "New RTCPeerConnection" does NOT mean "New Socket".
+    // Usually, we multiplex signaling over ONE socket.
+
+    // RE-DESIGN DECISION:
+    // To map "Google Meet" reliability, we should Multiplex.
+    // One Socket, Multiple PCs.
+    // Why? Because managing 2 sockets per user is messy (auth, maintaining 2 WS connections).
+    //
+    // SO:
+    // User has 1 Socket.
+    // User has Map<PeerID, PC_Camera>
+    // User has Map<PeerID, PC_Screen> (Outgoing)
+    // User has Map<PeerID, PC_Incoming_Screen>
+    //
+    // This means 'disconnect' only happens when the User leaves the app.
+    // When User stops screen share, they must emit 'stop-screen-share'.
+
+    // Let's support 'user-left-screen' event.
+    // We will broadcast "user-left" but with a suffix or flag?
+    // No, 'user-left' usually implies "Remove everything for this ID".
+    // Let's emit "screen-share-stopped" { socketId }.
+
+    // Actually, the previous "Virtual Peer" architecture *relied* on the server appending "-screen" to IDs.
+    // If we want "GMeet Clone" we should probably stick to the "Virtual Peer" pattern but make it cleaner.
+    // 
+    // Let's stick to the "Virtual Peer" pattern where the Client *pretends* to have a second socket ID?
+    // No, that requires the Server to rewrite IDs (which caused our bugs).
+    //
+    // BETTER APPROACH for "GMeet Clone":
+    // Explicit "Stream Type" Signaling.
+    // "offer" { type: "camera" | "screen" }
+    // The PeerConnection is created *per stream*? Or bundled?
+    // "Per Peer, Bundled Tracks" is standard WebRTC (Unified Plan).
+    // BUT "Per Stream" (Plan B style or just separate PCs) is often more robust for novice implementations because it avoids "Renegotiation Hell".
+    //
+    // Let's go with **Separate PCs Multiplexed over One Socket**.
+    // 1. `peersRef` stores Camera PCs. Key: `socketId`
+    // 2. `screenPeersRef` stores Screen PCs. Key: `socketId`
+    //
+    // Signaling:
+    // offer { type: 'screen' } -> Receiver looks in `screenPeersRef`.
+    // offer { type: 'camera' } -> Receiver looks in `peersRef`.
+
+    io.emit("screen-share-stopped", { socketId: socket.id });
+  });
+
+  // Specific handler for stopping screen share to notify others
+  socket.on("stop-screen-share", () => {
+    // Find the user to get the room
+    const user = users.find(u => u.socketId === socket.id);
+    if (user) {
+      socket.to(user.roomId).emit("user-stopped-screen", { socketId: socket.id });
+    }
+  });
+
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
