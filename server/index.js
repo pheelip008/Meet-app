@@ -153,23 +153,35 @@ io.on("connection", (socket) => {
     io.emit("screen-share-stopped", { socketId: socket.id });
   });
 
-  // Specific handler for stopping screen share to notify others
-  socket.on("stop-screen-share", () => {
-    // Find the user to get the room
-    const user = users.find(u => u.socketId === socket.id);
-    if (user) {
-      socket.to(user.roomId).emit("user-stopped-screen", { socketId: socket.id });
-    }
-  });
-
   // Broadcast layout change
   socket.on("screen-share-started", () => {
     const user = users.find(u => u.socketId === socket.id);
     if (user) {
+      user.isScreenSharing = true; // Track state
       socket.to(user.roomId).emit("user-started-screen", { socketId: socket.id, userName: user.userName });
     }
   });
 
+  // Specific handler for stopping screen share to notify others
+  socket.on("stop-screen-share", () => {
+    const user = users.find(u => u.socketId === socket.id);
+    if (user) {
+      user.isScreenSharing = false; // Track state
+      socket.to(user.roomId).emit("user-stopped-screen", { socketId: socket.id });
+    }
+  });
+
+  // Handle new joins who need to know about active screen shares
+  socket.on("check-screen-share", () => {
+    // Find anyone in this user's room who is sharing
+    const me = users.find(u => u.socketId === socket.id);
+    if (!me) return;
+
+    const presenter = users.find(u => u.roomId === me.roomId && u.isScreenSharing);
+    if (presenter) {
+      socket.emit("user-started-screen", { socketId: presenter.socketId, userName: presenter.userName });
+    }
+  });
 });
 
 const PORT = process.env.PORT || 5000;

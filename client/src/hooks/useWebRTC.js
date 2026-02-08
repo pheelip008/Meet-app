@@ -460,6 +460,7 @@ export default function useWebRTC(roomId, userName) {
         startScreenShare,
         stopScreenShare,
         localStreamRef,
-        screenStreamRef
+        screenStreamRef,
+        socketRef // Exposed for App.js to use
     };
 }

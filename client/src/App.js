@@ -26,6 +26,7 @@ function App() {
     startScreenShare,
     stopScreenShare,
     screenStreamRef, // Access ref specifically for local preview
+    socketRef, // Need socket for immediate checks
     remoteScreenShareUser // New state for layout sync
   } = useWebRTC(roomId, userName);
 
@@ -45,6 +46,14 @@ function App() {
       localVideoRef.current.play().catch(e => console.error("Local play error", e));
     }
   }, [localStream]);
+
+  // Check for existing screen shares upon joining
+  useEffect(() => {
+    if (joined && socketRef.current) {
+      socketRef.current.emit("check-screen-share");
+    }
+  }, [joined, socketRef]);
+
 
   // Attach Screen Share Preview
   useEffect(() => {
@@ -72,8 +81,9 @@ function App() {
   // Determine view mode
   const screenShareStream = remotePeers.flatMap(p => p.streams).find(s => s.type === "screen");
 
-  // Theater Mode: Active IF I am sharing OR someone else is signaling they are sharing
-  const isTheaterMode = isScreenSharing || !!remoteScreenShareUser;
+  // Theater Mode: Active IF I am sharing OR someone else is signaling they are sharing OR we possess a screen stream
+  const isTheaterMode = isScreenSharing || !!remoteScreenShareUser || !!screenShareStream;
+
 
   // Remote video component
   function RemoteVideo({ socketId, userName, streams, inSidebar }) {
