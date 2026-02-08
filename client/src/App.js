@@ -6,8 +6,7 @@ function App() {
   const [roomId, setRoomId] = useState("");
   const [userName, setUserName] = useState("");
 
-  // Refs (stateful logic moved to VideoPlayer component)
-  const cameraPreviewRef = useRef();
+
 
   // Helper Component for robust video rendering
   const VideoPlayer = ({ stream, isLocal = false, isScreen = false, style = {}, ...props }) => {
