@@ -78,9 +78,9 @@ function App() {
       }
     });
 
-    socket.on("offer", async ({ from, sdp, userName }) => {
+    socket.on("offer", async ({ from, sdp, userName, isScreen }) => {
       log(`Received offer from ${userName || from}`);
-      await handleOffer(from, sdp, userName);
+      await handleOffer(from, sdp, userName, isScreen);
     });
 
     socket.on("answer", async ({ from, sdp, isScreen }) => {
@@ -520,9 +520,12 @@ function App() {
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        // FIX: Explicitly check if this candidate is for a screen peer interaction
+        const isScreenTarget = targetSocketId.includes("-screen");
         socket.emit("ice-candidate", {
           targetSocketId,
           candidate: event.candidate,
+          isScreen: isScreenTarget
         });
       }
     };
@@ -548,7 +551,7 @@ function App() {
   }
 
   // handle incoming offer
-  async function handleOffer(fromSocketId, sdp, fromUserName) {
+  async function handleOffer(fromSocketId, sdp, fromUserName, isScreen) {
     // If we don't have a peer connection yet, create one
     if (!peersRef.current[fromSocketId]) {
       // We pass false for initiateOffer because we are answering
@@ -573,17 +576,20 @@ function App() {
       // Check state before setting remote description
       if (entry.pc.signalingState !== "stable" && entry.pc.signalingState !== "have-remote-offer") {
         console.warn("Using setRemoteDescription(offer) but state is", entry.pc.signalingState);
-        // If we are in 'have-local-offer', it means we also sent an offer (glare).
-        // A simple collision resolution strategy is needed.
-        // For now, if we are the 'polite' peer (e.g. smaller ID? or just always yield), we roll back.
-        // But implementing full glare handling is complex.
-        // Let's just log for now.
       }
 
       await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
       const answer = await entry.pc.createAnswer();
       await entry.pc.setLocalDescription(answer);
-      socket.emit("answer", { targetSocketId: fromSocketId, sdp: entry.pc.localDescription });
+
+      // FIX: Explicitly echo back isScreen flag if present, OR if the target ID implies it
+      const explicitIsScreen = isScreen || fromSocketId.includes("-screen");
+
+      socket.emit("answer", {
+        targetSocketId: fromSocketId,
+        sdp: entry.pc.localDescription,
+        isScreen: explicitIsScreen
+      });
     } catch (err) {
       console.error("Error handling offer:", err);
     }
