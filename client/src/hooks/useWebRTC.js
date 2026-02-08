@@ -157,13 +157,9 @@ export default function useWebRTC(roomId, userName) {
         }
 
         // Drain ICE Queue if any exist
-        if (iceCandidateQueue.current[queueKey]) {
-            console.log(`Draining ICE queue for ${queueKey} (${iceCandidateQueue.current[queueKey].length} candidates)`);
-            iceCandidateQueue.current[queueKey].forEach(async c => {
-                try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { console.error(e) }
-            });
-            delete iceCandidateQueue.current[queueKey];
-        }
+        // MODIFICATION: Moved to handleOffer/handleAnswer to avoid race condition
+        // where we add candidates before remote description is set.
+
 
         // Offer?
         if (initiateOffer && socketRef.current) {
@@ -208,15 +204,8 @@ export default function useWebRTC(roomId, userName) {
 
                 incomingScreenPeers.current[fromId] = { pc };
 
-                // Drain Queue
-                const qKey = `${fromId}_screen`;
-                if (iceCandidateQueue.current[qKey]) {
-                    console.log(`Draining ICE queue for ${qKey}`);
-                    iceCandidateQueue.current[qKey].forEach(async c => {
-                        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { }
-                    });
-                    delete iceCandidateQueue.current[qKey];
-                }
+                // Drain Queue MOVED to after setRemoteDescription
+
             }
         } else {
             if (!standardPeers.current[fromId]) {
@@ -233,6 +222,25 @@ export default function useWebRTC(roomId, userName) {
         }
 
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+        // DRAIN ICE QUEUE NOW
+        const queueKey = `${fromId}_${type === "screen" ? "screen" : "camera"}`; // or just use type since we know it
+        // actually for incoming screen it might be under 'screen' or 'incoming_screen'?
+        // The queue key was generated in handleIceCandidate as `${fromId}_${type}`.
+        // In handleOffer, type is passed as 'screen' or 'camera'. 
+        // Note: For incoming screen offer, we stored it as `${fromId}_screen` in handleIceCandidate?
+        // Let's check handleIceCandidate... it uses `${fromId}_${type}`.
+        // And handleOffer call passes `type` as 'screen' or 'camera'.
+        // So `${fromId}_${type}` is correct.
+
+        if (iceCandidateQueue.current[queueKey]) {
+            console.log(`Draining ICE queue for ${queueKey}`);
+            iceCandidateQueue.current[queueKey].forEach(async c => {
+                try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { console.warn("ICE Drain Error", e); }
+            });
+            delete iceCandidateQueue.current[queueKey];
+        }
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
@@ -255,6 +263,17 @@ export default function useWebRTC(roomId, userName) {
 
         if (pc) {
             await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+            // DRAIN ICE QUEUE NOW
+            const queueKey = `${fromId}_${type}`;
+            if (iceCandidateQueue.current[queueKey]) {
+                console.log(`Draining ICE queue for ${queueKey}`);
+                iceCandidateQueue.current[queueKey].forEach(async c => {
+                    try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { console.warn("ICE Drain Error", e); }
+                });
+                delete iceCandidateQueue.current[queueKey];
+            }
+
         }
     }, []);
 
