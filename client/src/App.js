@@ -190,9 +190,12 @@ function App() {
                       el.play().catch(console.error);
                     }
                   }}
-                  style={{ maxWidth: "100%", maxHeight: "90%", borderRadius: 8 }}
+                  muted // CRITICAL for mobile autoplay
                   playsInline
                   autoPlay
+                  onLoadedMetadata={e => {
+                    e.target.play().catch(err => console.error("AutoPlay Error:", err));
+                  }}
                 />
               ) : (
                 /* LOADER / PLACEHOLDER WHEN SIGNAL RECEIVED BUT STREAM NOT YET ARRIVED */
