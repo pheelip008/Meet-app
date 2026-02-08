@@ -6,10 +6,38 @@ function App() {
   const [roomId, setRoomId] = useState("");
   const [userName, setUserName] = useState("");
 
-  // Refs for video elements
-  const localVideoRef = useRef();
-  const screenVideoRef = useRef();
+  // Refs (stateful logic moved to VideoPlayer component)
   const cameraPreviewRef = useRef();
+
+  // Helper Component for robust video rendering
+  const VideoPlayer = ({ stream, isLocal = false, isScreen = false, style = {}, ...props }) => {
+    const videoRef = useRef(null);
+
+    useEffect(() => {
+      const el = videoRef.current;
+      if (el && stream) {
+        el.srcObject = stream;
+        if (isLocal && !isScreen) {
+          el.muted = true; // Always mute local camera
+        }
+        // Force play
+        el.play().catch(e => console.error("Video play error:", e));
+      } else if (el) {
+        el.srcObject = null;
+      }
+    }, [stream, isLocal, isScreen]);
+
+    return (
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        style={style}
+        {...props}
+      />
+    );
+  };
+
 
   // Use Custom Hook
   const {
@@ -38,14 +66,8 @@ function App() {
     hookJoinRoom();
   };
 
-  // Attach Local Video
-  useEffect(() => {
-    if (localStream && localVideoRef.current) {
-      localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.muted = true;
-      localVideoRef.current.play().catch(e => console.error("Local play error", e));
-    }
-  }, [localStream]);
+  // Attached via VideoPlayer component now
+
 
   // Check for existing screen shares upon joining
   useEffect(() => {
@@ -55,27 +77,13 @@ function App() {
   }, [joined, socketRef]);
 
 
-  // Attach Screen Share Preview
-  useEffect(() => {
-    if (isScreenSharing && screenStreamRef.current && screenVideoRef.current) {
-      screenVideoRef.current.srcObject = screenStreamRef.current;
-      screenVideoRef.current.play().catch(e => console.error("Screen preview error", e));
-    } else if (!isScreenSharing && screenVideoRef.current) {
-      screenVideoRef.current.srcObject = null;
-    }
+  // Screen Share Preview (Local)
+  // Logic moved to rendering section using VideoPlayer
 
-    // Hide/Show camera preview when sharing
-    if (cameraPreviewRef.current) {
-      if (isScreenSharing && localStream) {
-        cameraPreviewRef.current.style.display = "block";
-        cameraPreviewRef.current.srcObject = localStream;
-        cameraPreviewRef.current.muted = true;
-        cameraPreviewRef.current.play().catch(() => { });
-      } else {
-        cameraPreviewRef.current.style.display = "none";
-      }
-    }
-  }, [isScreenSharing, localStream, screenStreamRef]);
+  // Camera Preview in Theater Mode (Side effect for existing ref still needed or refactor?)
+  // We can refactor cameraPreview to use VideoPlayer too?
+  // But cameraPreview is in the sidebar. We'll use VideoPlayer there.
+
 
 
   // Determine view mode
@@ -97,23 +105,19 @@ function App() {
 
           return (
             <div key={stream.id} style={{ position: "relative", width: "100%", height: "100%" }}>
-              <video
-                autoPlay
-                playsInline
-                ref={(el) => {
-                  if (el && el.srcObject !== stream.mediaStream) {
-                    el.srcObject = stream.mediaStream;
-                    el.play().catch(e => console.error("Remote video play failed:", e));
-                  }
-                }}
+              <VideoPlayer
+                stream={stream.mediaStream}
+                isLocal={false}
+                isScreen={stream.type === "screen"}
                 style={{
                   width: inSidebar ? "100%" : "320px",
                   height: inSidebar ? "auto" : "240px",
                   border: stream.type === "screen" ? "2px solid #00f" : "none",
                   borderRadius: 8,
-                  backgroundColor: "#000" // visually show black box if video missing
+                  backgroundColor: "#000"
                 }}
               />
+
               {inSidebar && <span className="user-label" style={{ fontSize: "0.7rem", bottom: 5, left: 5 }}>{userName}</span>}
             </div>
           );
@@ -166,34 +170,34 @@ function App() {
             </span>
 
             {/* If I am sharing, show my preview */}
-            <video
-              ref={screenVideoRef}
-              style={{
-                display: isScreenSharing ? "block" : "none",
-                maxWidth: "100%",
-                maxHeight: "90%",
-                borderRadius: 8,
-                boxShadow: "0 0 20px rgba(0,0,0,0.5)"
-              }}
-              muted
-              playsInline
-            />
+            {/* If I am sharing, show my preview */}
+            {isScreenSharing && (
+              <VideoPlayer
+                stream={screenStreamRef.current}
+                isLocal={true}
+                isScreen={true}
+                style={{
+                  display: "block",
+                  maxWidth: "100%",
+                  maxHeight: "90%",
+                  borderRadius: 8,
+                  boxShadow: "0 0 20px rgba(0,0,0,0.5)"
+                }}
+              />
+            )}
+
 
             {/* If someone else is sharing, show them */}
             {remoteScreenShareUser && !isScreenSharing && (
               screenShareStream ? (
-                <video
+                <VideoPlayer
                   key={screenShareStream.id}
-                  ref={el => {
-                    if (el && el.srcObject !== screenShareStream.mediaStream) {
-                      el.srcObject = screenShareStream.mediaStream;
-                      el.play().catch(console.error);
-                    }
-                  }}
+                  stream={screenShareStream.mediaStream}
+                  isLocal={false}
+                  isScreen={true}
                   style={{ maxWidth: "100%", maxHeight: "90%", borderRadius: 8 }}
-                  playsInline
-                  autoPlay
                 />
+
               ) : (
                 /* LOADER / PLACEHOLDER WHEN SIGNAL RECEIVED BUT STREAM NOT YET ARRIVED */
                 <div className="loading-screen">
@@ -209,12 +213,12 @@ function App() {
           <div className="reaction-sidebar">
             {/* My Camera Preview */}
             <div className="video-wrapper" style={{ height: "auto", minHeight: 120 }}>
-              <video
-                ref={cameraPreviewRef}
+              <VideoPlayer
+                stream={localStream}
+                isLocal={true}
                 style={{ width: "100%", borderRadius: 8, transform: "scaleX(-1)" }}
-                muted
-                playsInline
               />
+
               <span className="user-label">You</span>
             </div>
 
@@ -251,13 +255,12 @@ function App() {
           <div className="video-grid">
             {/* Local User */}
             <div className="video-wrapper">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                muted
-                playsInline
+              <VideoPlayer
+                stream={localStream}
+                isLocal={true}
                 style={{ width: "320px", height: "240px", transform: "scaleX(-1)" }}
               />
+
               <div className="user-label">You</div>
             </div>
 
