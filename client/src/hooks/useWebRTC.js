@@ -29,6 +29,8 @@ export default function useWebRTC(roomId, userName) {
     const screenPeers = useRef({});
     const incomingScreenPeers = useRef({});
 
+    const [remoteScreenShareUser, setRemoteScreenShareUser] = useState(null); // socketId of presenter
+
     // Feature Flags
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [isAudioEnabled, setIsAudioEnabled] = useState(true);
@@ -72,6 +74,10 @@ export default function useWebRTC(roomId, userName) {
             }
             return p;
         }));
+
+        // If this user was the active presenter, clear state
+        setRemoteScreenShareUser(prev => prev === socketId ? null : prev);
+
     }, []);
 
     const removePeer = useCallback((socketId) => {
@@ -107,9 +113,14 @@ export default function useWebRTC(roomId, userName) {
         });
     }, [log]);
 
+    // ICE Candidate Queue (Fix for Race Condition)
+    // Structure: { [peerId_type]: [candidates] }
+    const iceCandidateQueue = useRef({});
+
     const createPeerConnection = useCallback(async (targetId, targetUserName, initiateOffer, type) => {
         const pc = new RTCPeerConnection(ICE_CONFIG);
         const isScreen = type === "screen";
+        const queueKey = `${targetId}_${type}`;
 
         // Add Tracks (Local Stream)
         const stream = isScreen ? screenStreamRef.current : localStreamRef.current;
@@ -145,6 +156,15 @@ export default function useWebRTC(roomId, userName) {
             screenPeers.current[targetId] = { pc };
         }
 
+        // Drain ICE Queue if any exist
+        if (iceCandidateQueue.current[queueKey]) {
+            console.log(`Draining ICE queue for ${queueKey} (${iceCandidateQueue.current[queueKey].length} candidates)`);
+            iceCandidateQueue.current[queueKey].forEach(async c => {
+                try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { console.error(e) }
+            });
+            delete iceCandidateQueue.current[queueKey];
+        }
+
         // Offer?
         if (initiateOffer && socketRef.current) {
             try {
@@ -166,6 +186,12 @@ export default function useWebRTC(roomId, userName) {
 
     const handleOffer = useCallback(async (fromId, sdp, type, fromUserName) => {
         const isScreen = type === "screen";
+        const queueKey = `${fromId}_${isScreen ? "incoming_screen" : "camera"}`;
+        // Note: For incoming screen, we use a specific type key logic to match handleIceCandidate?
+        // Actually, handleIceCandidate uses just "screen". 
+        // Let's standardize keys. 
+        // Camera: `${fromId}_camera`
+        // Screen: `${fromId}_screen` (Incoming)
 
         let pc;
 
@@ -187,6 +213,16 @@ export default function useWebRTC(roomId, userName) {
                 pc.ontrack = (e) => handleTrackEvent(e, fromId, fromUserName, "incoming_screen");
 
                 incomingScreenPeers.current[fromId] = { pc };
+
+                // Drain Queue
+                const qKey = `${fromId}_screen`;
+                if (iceCandidateQueue.current[qKey]) {
+                    console.log(`Draining ICE queue for ${qKey}`);
+                    iceCandidateQueue.current[qKey].forEach(async c => {
+                        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { }
+                    });
+                    delete iceCandidateQueue.current[qKey];
+                }
             }
         } else {
             if (!standardPeers.current[fromId]) {
@@ -230,7 +266,16 @@ export default function useWebRTC(roomId, userName) {
 
     const handleIceCandidate = useCallback(async (fromId, candidate, type) => {
         let pc;
+        let queueKey = `${fromId}_${type}`; // "screen" or "camera"
+
         if (type === "screen") {
+            // Check outgoing first? No, incoming candidates are for our outgoing PC?
+            // Wait. We receive candidate FROM remote.
+            // If I am sharer: I receive candidate for my `screenPeers` PC.
+            // If I am viewer: I receive candidate for my `incomingScreenPeers` PC.
+
+            // How do we know which one?
+            // Logic: Do we have an outgoing screen peer for this ID?
             if (screenPeers.current[fromId]) {
                 pc = screenPeers.current[fromId].pc;
             } else if (incomingScreenPeers.current[fromId]) {
@@ -241,7 +286,15 @@ export default function useWebRTC(roomId, userName) {
         }
 
         if (pc) {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (err) {
+                console.warn("ICE Add Failed", err);
+            }
+        } else {
+            console.log(`Queueing ICE candidate for ${queueKey}`);
+            if (!iceCandidateQueue.current[queueKey]) iceCandidateQueue.current[queueKey] = [];
+            iceCandidateQueue.current[queueKey].push(candidate);
         }
     }, []);
 
@@ -295,6 +348,12 @@ export default function useWebRTC(roomId, userName) {
         socket.on("user-stopped-screen", ({ socketId }) => {
             log(`User ${socketId} stopped screen share`);
             removeScreenPeer(socketId, "incoming");
+        });
+
+        // --- Explicit Layout Signals ---
+        socket.on("user-started-screen", ({ socketId, userName }) => {
+            log(`User ${userName || socketId} started screen share`);
+            setRemoteScreenShareUser(socketId);
         });
 
         return () => {
@@ -362,7 +421,11 @@ export default function useWebRTC(roomId, userName) {
         screenPeers.current = {};
 
         setIsScreenSharing(false);
-        if (socketRef.current) socketRef.current.emit("stop-screen-share");
+        if (socketRef.current) {
+            socketRef.current.emit("stop-screen-share");
+            // Also emit event for server to broadcast cleanup
+            socketRef.current.emit("disconnect-screen");
+        }
     }, []);
 
     const startScreenShare = useCallback(async () => {
@@ -370,6 +433,9 @@ export default function useWebRTC(roomId, userName) {
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             screenStreamRef.current = stream;
             setIsScreenSharing(true);
+
+            // Explicit Signal to server
+            if (socketRef.current) socketRef.current.emit("screen-share-started");
 
             stream.getVideoTracks()[0].onended = () => {
                 stopScreenShare();
@@ -390,6 +456,7 @@ export default function useWebRTC(roomId, userName) {
         peers,
         joined,
         isScreenSharing,
+        remoteScreenShareUser, // Expose this
         isAudioEnabled,
         isVideoEnabled,
         status: msg,

@@ -162,6 +162,14 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Broadcast layout change
+  socket.on("screen-share-started", () => {
+    const user = users.find(u => u.socketId === socket.id);
+    if (user) {
+      socket.to(user.roomId).emit("user-started-screen", { socketId: socket.id, userName: user.userName });
+    }
+  });
+
 });
 
 const PORT = process.env.PORT || 5000;
