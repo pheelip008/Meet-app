@@ -120,7 +120,7 @@ export default function useWebRTC(roomId, userName) {
                 return [...prev, { socketId: peerId, userName: peerName, streams: [newStreamEntry] }];
             }
         });
-    }, [log]);
+    }, []);
 
     // ICE Candidate Queue (Fix for Race Condition)
     // Structure: { [peerId_type]: [candidates] }
