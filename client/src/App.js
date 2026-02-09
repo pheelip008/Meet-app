@@ -10,14 +10,25 @@ const VideoPlayer = ({ stream, isLocal = false, isScreen = false, style = {}, ..
   useEffect(() => {
     const el = videoRef.current;
     if (el && stream) {
+      console.log(`🎬 VideoPlayer: Setting stream ${stream.id}, isLocal=${isLocal}, isScreen=${isScreen}`);
+      console.log(`   Stream has ${stream.getTracks().length} tracks:`);
+      stream.getTracks().forEach(track => {
+        console.log(`     - ${track.kind}: ${track.id}, enabled: ${track.enabled}, readyState: ${track.readyState}`);
+      });
+
       el.srcObject = stream;
       if (isLocal && !isScreen) {
         el.muted = true; // Always mute local camera
       }
       // Force play
-      el.play().catch(e => console.error("Video play error:", e));
+      el.play().then(() => {
+        console.log(`✅ Video playing for stream ${stream.id}`);
+      }).catch(e => console.error(`❌ Video play error for stream ${stream.id}:`, e));
     } else if (el) {
       el.srcObject = null;
+      if (!stream) {
+        console.warn(`⚠️ VideoPlayer: No stream provided, isLocal=${isLocal}, isScreen=${isScreen}`);
+      }
     }
   }, [stream, isLocal, isScreen]);
 
@@ -63,9 +74,9 @@ function App() {
 
   // --- UI Helpers ---
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!roomId || !userName) return alert("Enter Room ID and Name");
-    hookJoinRoom();
+    await hookJoinRoom();
   };
 
   // Attached via VideoPlayer component now
@@ -97,6 +108,11 @@ function App() {
 
   // Remote video component
   function RemoteVideo({ socketId, userName, streams, inSidebar }) {
+    console.log(`🎭 RemoteVideo for ${userName} (${socketId}): ${streams.length} streams, inSidebar=${inSidebar}`);
+    streams.forEach((s, idx) => {
+      console.log(`   Stream ${idx}: type=${s.type}, id=${s.id}, mediaStream=${!!s.mediaStream}`);
+    });
+
     return (
       <div className={inSidebar ? "remote-video-sidebar" : "video-wrapper"}>
         {!inSidebar && <div className="user-label">{userName || socketId}</div>}

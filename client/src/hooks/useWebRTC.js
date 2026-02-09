@@ -96,7 +96,11 @@ export default function useWebRTC(roomId, userName) {
         const stream = e.streams[0];
         const streamType = (type === "screen" || type === "incoming_screen") ? "screen" : "camera";
 
-        log(`Track received from ${peerId} (${streamType})`);
+        console.log(`🎵 Track received from ${peerId} (${streamType})`);
+        console.log(`   Stream ID: ${stream.id}, tracks: ${stream.getTracks().length}`);
+        stream.getTracks().forEach(track => {
+            console.log(`     - ${track.kind}: ${track.id}, enabled: ${track.enabled}`);
+        });
 
         setPeers(prev => {
             const existing = prev.find(p => p.socketId === peerId);
@@ -104,10 +108,15 @@ export default function useWebRTC(roomId, userName) {
 
             if (existing) {
                 // Avoid duplicate streams
-                if (existing.streams.some(s => s.id === stream.id)) return prev;
+                if (existing.streams.some(s => s.id === stream.id)) {
+                    console.log(`   ⚠️ Stream ${stream.id} already exists for peer ${peerId}, skipping`);
+                    return prev;
+                }
 
+                console.log(`   ✅ Adding stream to existing peer ${peerId}, total streams will be: ${existing.streams.length + 1}`);
                 return prev.map(p => p.socketId === peerId ? { ...p, streams: [...p.streams, newStreamEntry] } : p);
             } else {
+                console.log(`   ✅ Creating new peer entry for ${peerId} with this stream`);
                 return [...prev, { socketId: peerId, userName: peerName, streams: [newStreamEntry] }];
             }
         });
@@ -125,27 +134,47 @@ export default function useWebRTC(roomId, userName) {
         // Add Tracks (Local Stream)
         const stream = isScreen ? screenStreamRef.current : localStreamRef.current;
         if (stream) {
-            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+            console.log(`Adding ${stream.getTracks().length} tracks to PC for ${targetId} (${type})`);
+            stream.getTracks().forEach(track => {
+                console.log(`  - Adding ${track.kind} track: ${track.id}, enabled: ${track.enabled}`);
+                pc.addTrack(track, stream);
+            });
+        } else {
+            console.warn(`No ${type} stream available when creating PC for ${targetId}`);
         }
 
-        // Handlers
+        // Handlers - Set up AFTER adding tracks
         pc.onicecandidate = (e) => {
             if (e.candidate && socketRef.current) {
+                console.log(`🧊 ICE candidate for ${targetId} (${type}): ${e.candidate.candidate.substring(0, 50)}...`);
                 socketRef.current.emit("ice-candidate", {
                     targetSocketId: targetId,
                     candidate: e.candidate,
                     isScreen // Flag tells receiver which PC to use
                 });
+            } else if (!e.candidate) {
+                console.log(`🧊 ICE gathering complete for ${targetId} (${type})`);
             }
         };
 
         pc.ontrack = (e) => {
+            console.log(`🎵 ontrack fired for ${targetId} (${type})`);
             handleTrackEvent(e, targetId, targetUserName, type);
         };
 
         pc.onconnectionstatechange = () => {
-            console.log(`PC State ${targetId} (${type}): ${pc.connectionState}`);
-            if (pc.connectionState === 'failed') restartIce(pc);
+            console.log(`🔌 PC Connection State ${targetId} (${type}): ${pc.connectionState}`);
+            if (pc.connectionState === 'failed') {
+                console.error(`❌ Connection failed for ${targetId} (${type})`);
+                restartIce(pc);
+            }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            console.log(`🧊 ICE Connection State ${targetId} (${type}): ${pc.iceConnectionState}`);
+            if (pc.iceConnectionState === 'failed') {
+                console.error(`❌ ICE connection failed for ${targetId} (${type})`);
+            }
         };
 
         // Store PC
@@ -164,8 +193,9 @@ export default function useWebRTC(roomId, userName) {
         // Offer?
         if (initiateOffer && socketRef.current) {
             try {
-                const offer = await pc.createOffer({ iceRestart: true });
+                const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
+                console.log(`Sending ${type} offer to ${targetId}`);
                 socketRef.current.emit("offer", {
                     targetSocketId: targetId,
                     sdp: pc.localDescription,
@@ -182,6 +212,8 @@ export default function useWebRTC(roomId, userName) {
 
     const handleOffer = useCallback(async (fromId, sdp, type, fromUserName) => {
         const isScreen = type === "screen";
+
+        console.log(`📥 handleOffer: type=${type}, from=${fromUserName || fromId}`);
 
         let pc;
 
@@ -208,20 +240,49 @@ export default function useWebRTC(roomId, userName) {
 
             }
         } else {
+            // Camera offer
+            console.log(`📹 Camera offer from ${fromUserName}, checking if peer exists...`);
             if (!standardPeers.current[fromId]) {
+                console.log(`Creating new camera peer for ${fromId}`);
                 await createPeerConnection(fromId, fromUserName, false, "camera");
+            } else {
+                console.log(`Camera peer already exists for ${fromId}`);
             }
             pc = standardPeers.current[fromId]?.pc;
+
+            if (pc) {
+                const senders = pc.getSenders();
+                console.log(`Camera PC for ${fromId}:`);
+                console.log(`  - Senders: ${senders.length}`);
+                console.log(`  - Signaling state: ${pc.signalingState}`);
+                console.log(`  - Connection state: ${pc.connectionState}`);
+                console.log(`  - ICE connection state: ${pc.iceConnectionState}`);
+                console.log(`  - ontrack handler: ${pc.ontrack ? 'SET' : 'NOT SET'}`);
+            }
         }
 
-        if (!pc) return; // Safety
-
-        if (pc.signalingState !== "stable" && pc.signalingState !== "have-remote-offer") {
-            console.warn(`Signaling state mismatch: ${pc.signalingState}`);
-            // Attempt to proceed anyway
+        if (!pc) {
+            console.error(`❌ No peer connection found for ${fromId} (${type})`);
+            return; // Safety
         }
 
+        // Handle glare condition (both sides sending offers simultaneously)
+        const isStable = pc.signalingState === "stable";
+        const isSettingRemoteOffer = sdp.type === "offer";
+
+        if (!isStable && isSettingRemoteOffer) {
+            console.warn(`⚠️ Glare condition detected for ${fromId} (${type})`);
+            console.warn(`   Current signaling state: ${pc.signalingState}`);
+            console.warn(`   Rolling back to handle incoming offer...`);
+
+            // Rollback the pending local offer
+            await pc.setLocalDescription({ type: "rollback" });
+            console.log(`   ✅ Rolled back to stable state`);
+        }
+
+        console.log(`Setting remote description for ${fromId} (${type})`);
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        console.log(`   Remote description set, new signaling state: ${pc.signalingState}`);
 
         // DRAIN ICE QUEUE NOW
         const queueKey = `${fromId}_${type === "screen" ? "screen" : "camera"}`; // or just use type since we know it
@@ -241,10 +302,12 @@ export default function useWebRTC(roomId, userName) {
             delete iceCandidateQueue.current[queueKey];
         }
 
+        console.log(`Creating answer for ${fromId} (${type})`);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
         if (socketRef.current) {
+            console.log(`📤 Sending answer to ${fromId} (${type})`);
             socketRef.current.emit("answer", {
                 targetSocketId: fromId,
                 sdp: pc.localDescription,
@@ -322,17 +385,22 @@ export default function useWebRTC(roomId, userName) {
         });
 
         socket.on("existing-users", (users) => {
+            console.log(`📋 Received existing-users: ${users.length} users`);
             users.forEach((user) => {
+                console.log(`  - Creating camera connection to: ${user.userName} (${user.socketId})`);
                 createPeerConnection(user.socketId, user.userName, true, "camera");
             });
         });
 
         socket.on("user-joined", ({ socketId, userName }) => {
+            console.log(`👤 User joined: ${userName} (${socketId})`);
             log(`${userName} joined`);
+            console.log(`  - Creating camera connection (we are answerer)`);
             createPeerConnection(socketId, userName, false, "camera");
 
             if (screenStreamRef.current) {
                 log(`Sharing screen to new user ${userName}`);
+                console.log(`  - Also creating screen connection (we are offerer)`);
                 createPeerConnection(socketId, userName, true, "screen");
             }
         });
@@ -351,6 +419,7 @@ export default function useWebRTC(roomId, userName) {
 
         socket.on("ice-candidate", async ({ from, candidate, isScreen }) => {
             const type = isScreen ? "screen" : "camera";
+            console.log(`📨 Received ICE candidate from ${from} (${type})`);
             await handleIceCandidate(from, candidate, type);
         });
 
@@ -382,22 +451,92 @@ export default function useWebRTC(roomId, userName) {
         removeScreenPeer
     ]);
 
+    // --- Renegotiate existing peers when local stream becomes available ---
+    // This fixes the race condition where peer connections were created before media was ready
+    useEffect(() => {
+        if (!localStream || !joined) return;
+
+        console.log("Local stream ready, checking existing peers...");
+        console.log(`Current peer count: ${Object.keys(standardPeers.current).length}`);
+
+        // For each existing peer connection without tracks, add them now
+        Object.entries(standardPeers.current).forEach(([peerId, peerData]) => {
+            const pc = peerData.pc;
+            const senders = pc.getSenders();
+
+            console.log(`Peer ${peerId}: ${senders.length} senders, signaling state: ${pc.signalingState}`);
+
+            // Check if we have any senders (tracks)
+            // Only renegotiate if we have NO senders AND the connection is stable
+            if (senders.length === 0 && localStreamRef.current && pc.signalingState === 'stable') {
+                console.log(`⚠️ Adding tracks to existing peer ${peerId} (renegotiation)`);
+                localStreamRef.current.getTracks().forEach(track => {
+                    console.log(`  - Adding ${track.kind} track via renegotiation`);
+                    pc.addTrack(track, localStreamRef.current);
+                });
+
+                // Create new offer with the tracks
+                pc.createOffer().then(offer => {
+                    return pc.setLocalDescription(offer);
+                }).then(() => {
+                    if (socketRef.current) {
+                        console.log(`Sending renegotiation offer to ${peerId}`);
+                        socketRef.current.emit("offer", {
+                            targetSocketId: peerId,
+                            sdp: pc.localDescription,
+                            isScreen: false,
+                            userName
+                        });
+                    }
+                }).catch(err => console.error("Renegotiation error:", err));
+            } else if (senders.length > 0) {
+                console.log(`✅ Peer ${peerId} already has tracks, skipping renegotiation`);
+            }
+        });
+    }, [localStream, joined, userName]);
+
     // --- Actions ---
 
     const getMedia = useCallback(async () => {
         try {
+            console.log("🎥 Requesting user media (camera + microphone)...");
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            console.log(`✅ Media acquired! Stream ID: ${stream.id}`);
+            console.log(`   Tracks: ${stream.getTracks().length}`);
+            stream.getTracks().forEach(track => {
+                console.log(`   - ${track.kind}: ${track.id}, enabled: ${track.enabled}, readyState: ${track.readyState}`);
+            });
+
             localStreamRef.current = stream;
             setLocalStream(stream);
+            console.log("📹 Local stream set in state and ref");
         } catch (err) {
-            console.error("Failed to get media", err);
+            console.error("❌ Failed to get media:", err);
+
+            let errorMessage = "Failed to access camera/microphone: " + err.message;
+
+            if (err.name === "NotReadableError") {
+                errorMessage = "⚠️ Camera/Microphone is already in use!\n\n" +
+                    "Please:\n" +
+                    "1. Close other apps using the camera (Zoom, Teams, Skype, etc.)\n" +
+                    "2. Close other browser tabs using the camera\n" +
+                    "3. Refresh this page and try again";
+            } else if (err.name === "NotAllowedError") {
+                errorMessage = "⚠️ Camera/Microphone permission denied!\n\n" +
+                    "Please allow camera and microphone access in your browser settings.";
+            } else if (err.name === "NotFoundError") {
+                errorMessage = "⚠️ No camera or microphone found!\n\n" +
+                    "Please connect a camera and microphone to your device.";
+            }
+
+            alert(errorMessage);
         }
     }, []);
 
-    const joinRoom = useCallback(() => {
+    const joinRoom = useCallback(async () => {
         if (!roomId || !userName) return alert("Enter Room ID and Name");
+        await getMedia(); // Wait for media first
         socketRef.current.emit("join-room", roomId, userName);
-        getMedia();
         setJoined(true);
     }, [roomId, userName, getMedia]);
 
@@ -443,7 +582,18 @@ export default function useWebRTC(roomId, userName) {
 
     const startScreenShare = useCallback(async () => {
         try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    cursor: "always",
+                    displaySurface: "monitor"
+                }
+            });
+
+            console.log(`Screen stream obtained: ${stream.id}, tracks: ${stream.getTracks().length}`);
+            stream.getTracks().forEach(track => {
+                console.log(`  - ${track.kind} track: ${track.id}, enabled: ${track.enabled}`);
+            });
+
             screenStreamRef.current = stream;
             setIsScreenSharing(true);
 
@@ -454,13 +604,18 @@ export default function useWebRTC(roomId, userName) {
                 stopScreenShare();
             };
 
-            Object.keys(standardPeers.current).forEach(targetId => {
+            // Create screen peer connections for all existing peers
+            const peerIds = Object.keys(standardPeers.current);
+            console.log(`Creating screen share connections for ${peerIds.length} peers`);
+
+            for (const targetId of peerIds) {
                 const userName = standardPeers.current[targetId].userName;
-                createPeerConnection(targetId, userName, true, "screen");
-            });
+                await createPeerConnection(targetId, userName, true, "screen");
+            }
 
         } catch (err) {
             console.error("Screen Share failed", err);
+            alert("Screen sharing failed: " + err.message);
         }
     }, [createPeerConnection, stopScreenShare]);
 
