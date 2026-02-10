@@ -60,28 +60,24 @@ io.on("connection", (socket) => {
   // We strictly route by targetSocketId.
   // We invoke the 'isScreen' flag to help the client, but the server just passes it through.
 
-  socket.on("offer", ({ targetSocketId, sdp, isScreen, userName }) => {
-    io.to(targetSocketId).emit("offer", {
+  socket.on("offer", (payload) => {
+    io.to(payload.targetSocketId).emit("offer", {
+      ...payload,
       from: socket.id,
-      sdp,
-      isScreen,
-      userName // Sender's username (useful for the receiver to identify "Pheel (Screen)")
     });
   });
 
-  socket.on("answer", ({ targetSocketId, sdp, isScreen }) => {
-    io.to(targetSocketId).emit("answer", {
+  socket.on("answer", (payload) => {
+    io.to(payload.targetSocketId).emit("answer", {
+      ...payload,
       from: socket.id,
-      sdp,
-      isScreen
     });
   });
 
-  socket.on("ice-candidate", ({ targetSocketId, candidate, isScreen }) => {
-    io.to(targetSocketId).emit("ice-candidate", {
+  socket.on("ice-candidate", (payload) => {
+    io.to(payload.targetSocketId).emit("ice-candidate", {
+      ...payload,
       from: socket.id,
-      candidate,
-      isScreen
     });
   });
 
