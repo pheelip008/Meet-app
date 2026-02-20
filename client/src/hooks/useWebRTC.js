@@ -619,12 +619,57 @@ export default function useWebRTC(roomId, userName) {
         }
     }, [createPeerConnection, stopScreenShare]);
 
+    const leaveRoom = useCallback(() => {
+        // 1. Stop all local tracks
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => track.stop());
+            localStreamRef.current = null;
+            setLocalStream(null);
+        }
+
+        if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach(track => track.stop());
+            screenStreamRef.current = null;
+        }
+
+        // 2. Close all Peer Connections
+        Object.keys(standardPeers.current).forEach(key => {
+            standardPeers.current[key].pc.close();
+        });
+        standardPeers.current = {};
+
+        Object.keys(screenPeers.current).forEach(key => {
+            screenPeers.current[key].pc.close();
+        });
+        screenPeers.current = {};
+
+        Object.keys(incomingScreenPeers.current).forEach(key => {
+            incomingScreenPeers.current[key].pc.close();
+        });
+        incomingScreenPeers.current = {};
+
+        // 3. Notify Server
+        if (socketRef.current) {
+            socketRef.current.emit("leave-room");
+            // Do NOT disconnect socket, just leave room context
+        }
+
+        // 4. Reset State
+        setJoined(false);
+        setPeers([]);
+        setIsScreenSharing(false);
+        setIsAudioEnabled(true);
+        setIsVideoEnabled(true);
+        setRemoteScreenShareUser(null);
+
+    }, []);
+
     return {
         localStream,
         peers,
         joined,
         isScreenSharing,
-        remoteScreenShareUser, // Expose this
+        remoteScreenShareUser,
         isAudioEnabled,
         isVideoEnabled,
         status: msg,
@@ -633,8 +678,9 @@ export default function useWebRTC(roomId, userName) {
         toggleCam,
         startScreenShare,
         stopScreenShare,
+        leaveRoom, // Expose function
         localStreamRef,
         screenStreamRef,
-        socketRef // Exposed for App.js to use
+        socketRef
     };
 }

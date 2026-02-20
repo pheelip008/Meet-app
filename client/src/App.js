@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./App.css";
 import useWebRTC from "./hooks/useWebRTC";
-
+//working!!
 
 // Helper Component for robust video rendering
 const VideoPlayer = ({ stream, isLocal = false, isScreen = false, style = {}, ...props }) => {
@@ -66,6 +66,7 @@ function App() {
     toggleCam,
     startScreenShare,
     stopScreenShare,
+    leaveRoom,
     screenStreamRef, // Access ref specifically for local preview
     socketRef, // Need socket for immediate checks
     remoteScreenShareUser // New state for layout sync
@@ -251,6 +252,7 @@ function App() {
 
             {/* Controls in Sidebar */}
             <div className="controls-bar" style={{ flexDirection: "column", marginTop: "auto" }}>
+              <button onClick={leaveRoom} className="danger" style={{ marginBottom: "10px" }}>End Meeting</button>
               <button onClick={toggleMic} className={isAudioEnabled ? "btn-active" : "btn-inactive"}>
                 {isAudioEnabled ? "🎤 Mute" : "🎤 Unmute"}
               </button>
@@ -297,6 +299,9 @@ function App() {
             </button>
             <button className="primary" onClick={startScreenShare}>
               Share Screen
+            </button>
+            <button className="danger" onClick={leaveRoom}>
+              End Meeting
             </button>
           </div>
         </div>
