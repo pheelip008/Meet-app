@@ -95,21 +95,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Explicitly leaving the room
-  socket.on("leave-room", () => {
-    console.log(`👋 User left room: ${socket.id}`);
-    const userIndex = users.findIndex((u) => u.socketId === socket.id);
-
-    if (userIndex !== -1) {
-      const user = users[userIndex];
-      socket.to(user.roomId).emit("user-left", { socketId: socket.id, userName: user.userName });
-      users.splice(userIndex, 1);
-
-      // Leave the socket room so they don't receive future messages
-      socket.leave(user.roomId);
-    }
-  });
-
   // Explicit Screen Disconnect (if client wants to manually close just the screen peer)
   socket.on("disconnect-screen", () => {
     // If the client manages the screen socket separately, 'disconnect' above handles it.
